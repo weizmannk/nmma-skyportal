@@ -1,3 +1,11 @@
+#---------------------------------------------------------------------------------------------------
+#  ?                                           ABOUT
+#  @author         :  Theophile Jegou du Laz
+#  @email          :  
+#  @repo           :  https://github.com/skyportal-contrib/skyportal-fink-client 
+#  @createdOn      :  Jun 30 2022 
+#  @description    :  Poll fink specific stream alerts ant post them on SkyPortal  
+#---------------------------------------------------------------------------------------------------
 # coding: utf-8
 import os
 from subprocess import call
