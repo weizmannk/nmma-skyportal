@@ -18,7 +18,7 @@ from .utils import skyportal_api
 #from .utils.switchers import fid_to_filter_ztf
 from .utils.log import make_log
 from .utils import config_file
-from .utils import fid_to_filter_ztf
+from .utils.ztf_filter import fid_to_filter_ztf
 import pandas as pd
 
 
@@ -32,11 +32,9 @@ taxonomy_dict = config_file.yaml_to_dict(
     os.path.abspath(os.path.join(os.path.dirname(__file__))) + "/data/taxonomy.yaml"
 )
 
-schema = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "/../tests/schemas/schema_test.avsc")
-)
+schema = os.path.abspath(os.path.join(os.path.dirname(__file__), "/../tests/schemas/schema_test.avsc"))
 
-#Read skyportal admin token from skyportal dir
+#Read skyportal admin token from skyportal directory
 admin_token  = '.tokens.yaml'
 skyportal_path= os.path.abspath(os.path.join(os.path.dirname(__file__))) + '/../../skyportal/'
 skyortoltal_token = config_file.skyportal_admin_token(skyportal_path)
@@ -393,3 +391,4 @@ def poll_alerts(
 
 if __name__ == "__main__":
     poll_alerts()
+
