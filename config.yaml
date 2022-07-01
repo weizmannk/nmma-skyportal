@@ -1,0 +1,15 @@
+fink_topics:
+  - fink_rate_based_kn_candidates_ztf
+  - fink_kn_candidates_ztf
+  - fink_early_kn_candidates_ztf
+  - fink_sn_candidates_ztf
+  - fink_early_sn_candidates_ztf
+fink_username: weizmann
+fink_password: null
+fink_group_id: weizmann_k
+fink_servers: 134.158.74.95:24499
+skyportal_token: 7ccefa63-3d0e-46af-bac0-6350c04b3e58
+skyportal_url: http://localhost:5000
+skyportal_group: NMMA-SkyPortal
+testing: false
+whitelisted: true
