@@ -1,11 +1,11 @@
-#---------------------------------------------------------------------------------------------------
+# ---------------------------------------------------------------------------------------------------
 #  ?                                           ABOUT
 #  @author         :  Theophile Jegou du Laz
-#  @email          :  
-#  @repo           :  https://github.com/skyportal-contrib/skyportal-fink-client 
-#  @createdOn      :  Jun 30 2022 
-#  @description    :  Poll fink specific stream alerts ant post them on SkyPortal  
-#---------------------------------------------------------------------------------------------------
+#  @email          :
+#  @repo           :  https://github.com/skyportal-contrib/skyportal-fink-client
+#  @createdOn      :  Jun 30 2022
+#  @description    :  Poll fink specific stream alerts ant post them on SkyPortal
+# ---------------------------------------------------------------------------------------------------
 # coding: utf-8
 import os
 from subprocess import call
@@ -14,13 +14,13 @@ from astropy.time import Time
 from fink_filters.classification import extract_fink_classification_from_pdf
 
 from .utils import skyportal_api
-#from .utils import files
-#from .utils.switchers import fid_to_filter_ztf
+
+# from .utils import files
+# from .utils.switchers import fid_to_filter_ztf
 from .utils.log import make_log
 from .utils import config_file
 from .utils.ztf_filter import fid_to_filter_ztf
 import pandas as pd
-
 
 
 # open yaml config file
@@ -32,11 +32,15 @@ taxonomy_dict = config_file.yaml_to_dict(
     os.path.abspath(os.path.join(os.path.dirname(__file__))) + "/data/taxonomy.yaml"
 )
 
-schema = os.path.abspath(os.path.join(os.path.dirname(__file__), "/../tests/schemas/schema_test.avsc"))
+schema = os.path.abspath(
+    os.path.join(os.path.dirname(__file__), "/../tests/schemas/schema_test.avsc")
+)
 
-#Read skyportal admin token from skyportal directory
-admin_token  = '.tokens.yaml'
-skyportal_path= os.path.abspath(os.path.join(os.path.dirname(__file__))) + '/../../skyportal/'
+# Read skyportal admin token from skyportal directory
+admin_token = ".tokens.yaml"
+skyportal_path = (
+    os.path.abspath(os.path.join(os.path.dirname(__file__))) + "/../../skyportal/"
+)
 skyortoltal_token = config_file.skyportal_admin_token(skyportal_path)
 
 
@@ -391,4 +395,3 @@ def poll_alerts(
 
 if __name__ == "__main__":
     poll_alerts()
-
