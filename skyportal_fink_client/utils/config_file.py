@@ -15,7 +15,6 @@ def yaml_to_dict(datapath: str):
     """
     Open and  Converts a yaml configuration file to a dictionary.
     :param datapath(str): The path to the yaml file.
-    :param config_filename(str): the config filname
     :return: A dictionary.
     """
     with open(datapath, "r") as stream:
@@ -41,21 +40,39 @@ def dict_to_yaml(dict: dict, datapath: str):
             print(exc)
 
 
-def skyportal_admin_token(skyportal_path: str, admin_token: str = ".tokens.yaml"):
+def skyportal_admin_token(skyportal_token_path: str):
 
     """Read the new skyportal token in a dict
         in the yaml config file.
     Args:
-        skyportal_path (str): Give the path where is the skyportal admin token.
-        admin_token (str='.tokens.yaml'): is the name of the skyportal admin token
-        config_filename(str): the config file name
+        skyportal_token_path (str): Give the path where is the skyportal admin token.
+        admin_token (.tokens.yaml): is the name of the skyportal admin token
 
     Returns: skyportal admin token
     """
-    token_path = f"{skyportal_path}{admin_token}".format()
-    skyportal_token = yaml_to_dict(token_path)
-    skyportal_token = skyportal_token["INITIAL_ADMIN"]
-    assert skyportal_token is not None
-    assert skyportal_token is not ""
+    token = yaml_to_dict(skyportal_token_path)
+    skyportal_token = token["INITIAL_ADMIN"]
 
     return skyportal_token
+
+
+def update_config_file(config_file_path: str, skyportal_token_path: str):
+
+    """
+    Args:
+        skyportal_path (str): Give the path where is the skyportal admin token.
+        admin_token (.tokens.yaml): is the name of the skyportal admin token
+        config_file_path(str): Give the config.yaml file dir
+
+    Returns: skyportal admin token
+    """
+    try:
+        conf = yaml_to_dict(config_file_path)
+
+        conf["skyportal_token"] = skyportal_admin_token(skyportal_token_path)
+
+        dict_to_yaml(conf, config_file_path)
+
+    except Exception as exc:
+        print(exc)
+        print("Failed to copy skyportal token")
