@@ -22,7 +22,7 @@ from baselayer.log import make_log
 from baselayer.app.env import load_env
 
 _, cfg = load_env()
-log = make_log("sn_analysis_service")
+log = make_log("nmma_analysis_service")
 
 # we need to set the backend here to insure we
 # can render the plot headlessly
@@ -60,7 +60,7 @@ def upload_analysis_results(results, data_dict, request_timeout=60):
 
 def run_sn_model(data_dict):
     """
-    Use `sncosmo` to fit data to a model with name `source_name`.
+    Use `nmma` to fit data to a model with name `source_name`.
     For this analysis, we expect the `inputs` dictionary to have the following keys:
        - source: the name of the model to fit to the data
        - fix_z: whether to fix the redshift
@@ -82,14 +82,16 @@ def run_sn_model(data_dict):
     # - flux: the flux of the observation
     #
     # the following code transforms these inputs from SkyPortal
-    # to the format expected by sncosmo.
+    # to the format expected by nmma.
     #
     rez = {"status": "failure", "message": "", "analysis": {}}
     try:
         data = Table.read(data_dict["inputs"]["photometry"], format="ascii.csv")
-        data.rename_column("mjd", "time")
-        data.rename_column("filter", "band")
-        data.rename_column("magsys", "zpsys")
+        data.rename_column("mjd", "jd")
+        data.rename_column("magsys", "mag")
+        data.rename_column("magerr", "mag_unc")
+        data.rename_column("limiting_mag", "limmag")
+        data.rename_column("")
 
         data["flux"].fill_value = 1e-6
         data = data.filled()
