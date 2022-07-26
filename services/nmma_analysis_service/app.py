@@ -16,7 +16,7 @@ import tornado.web
 import tornado.escape
 
 from astropy.table import Table
-import sncosmo
+import nmma_fit
 
 from baselayer.log import make_log
 from baselayer.app.env import load_env
@@ -29,7 +29,8 @@ log = make_log("nmma_analysis_service")
 matplotlib.use("Agg")
 rng = np.random.default_rng()
 
-default_analysis_parameters = {"source": "nugent-sn2p", "fix_z": False}
+# ["Bu2019lm", "Ka2017", "nugent-hyper", "TrPi2018", "Piro2021"]
+default_analysis_parameters = {"source": "Bu2019lm", "fix_z": False}
 
 
 def upload_analysis_results(results, data_dict, request_timeout=60):
@@ -58,7 +59,7 @@ def upload_analysis_results(results, data_dict, request_timeout=60):
         log(f"Callback exception {e}.")
 
 
-def run_sn_model(data_dict):
+def run_nmma_model(data_dict):
     """
     Use `nmma` to fit data to a model with name `source_name`.
     For this analysis, we expect the `inputs` dictionary to have the following keys:
@@ -79,8 +80,9 @@ def run_sn_model(data_dict):
     # - filter: the name of the bandpass
     # - mjd: the modified Julian date of the observation
     # - magsys: the mag system (e.g. ab) of the observations
+    # - limiting_mag:
+    # - magerr:
     # - flux: the flux of the observation
-    #
     # the following code transforms these inputs from SkyPortal
     # to the format expected by nmma.
     #
@@ -91,7 +93,6 @@ def run_sn_model(data_dict):
         data.rename_column("magsys", "mag")
         data.rename_column("magerr", "mag_unc")
         data.rename_column("limiting_mag", "limmag")
-        data.rename_column("")
 
         data["flux"].fill_value = 1e-6
         data = data.filled()
@@ -112,6 +113,26 @@ def run_sn_model(data_dict):
     # locally and then write their contents
     # to the results dictionary for uploading
     local_temp_files = []
+
+    """
+    model_name = source
+    cand_name  = data['obj_id']
+    nmma_data  = data
+    prior_directory="../../../nmma/priors"
+    svdmodel_directory="../../../nmma/svdmodels"
+    gptype="sklearn"
+    sampler="pymultinest"
+
+    fitted_model= nmma_fit.fit_lc(
+        model_name,
+        cand_name,
+        nmma_data,
+        prior_directory,
+        svdmodel_directory,
+        gptype,
+        sampler
+    )
+    """
 
     try:
         model = sncosmo.Model(source=source)
@@ -135,7 +156,7 @@ def run_sn_model(data_dict):
 
         if result.success:
             f = tempfile.NamedTemporaryFile(
-                suffix=".png", prefix="snplot_", delete=False
+                suffix=".png", prefix="nmmaplot_", delete=False
             )
             f.close()
             _ = sncosmo.plot_lc(
@@ -146,6 +167,7 @@ def run_sn_model(data_dict):
                 figtext=data_dict["resource_id"],
                 fname=f.name,
             )
+
             plot_data = base64.b64encode(open(f.name, "rb").read())
             local_temp_files.append(f.name)
 

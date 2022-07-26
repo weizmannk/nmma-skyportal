@@ -16,25 +16,25 @@ from fink_filters.classification import extract_fink_classification_from_pdf
 from .utils import skyportal_api
 from .utils.switchers import fid_to_filter_ztf
 from .utils.log import make_log
-from .utils import config_file
+from .utils import config_file as file
 
 import pandas as pd
 
 
 # config.yaml file dir
-config_file_path = os.path.join(os.path.dirname(__file__)) + "/../config.yaml"
+config = "config.yaml"
+config_file_path = os.path.join(os.path.dirname(__file__)) + "/../"
 
 # skyportal admin token dir
+admin_token = ".tokens.yaml"
 skyportal_token_path = (
-    os.path.abspath(os.path.join(os.path.dirname(__file__)))
-    + "/../services/skyportal/.tokens.yaml"
+    os.path.abspath(os.path.join(os.path.dirname(__file__))) + "/../../skyportal/"
 )
-
 # Copy the neww token in the config file
-config_file.update_config_file(config_file_path, skyportal_token_path)
+file.update_config_file(config_file_path, config, skyportal_token_path, admin_token)
 
 # open yaml config file
-conf = config_file.yaml_to_dict(config_file_path)
+conf = file.load_config(config_file_path, config)
 
 taxonomy_dict = config_file.yaml_to_dict(
     os.path.abspath(os.path.join(os.path.dirname(__file__))) + "/data/taxonomy.yaml"
@@ -47,7 +47,7 @@ schema = os.path.abspath(
 # Read skyportal admin token from skyportal directory
 # admin_token = ".tokens.yaml"
 
-skyportal_token = config_file.skyportal_admin_token(skyportal_token_path)
+skyportal_token = file.get_skyportal_admin_token(skyportal_token_path, admin_token)
 
 
 def init_skyportal(
