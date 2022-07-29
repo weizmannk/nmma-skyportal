@@ -113,101 +113,111 @@ def fit_lc(
             print("nmma_fit.py does not know of the prior file for model ", model_name)
             exit(1)
 
-    plotdir = tempfile.mkdtemp()
+    plotdir = os.path.abspath("..") + "/" + os.path.join("nmma_output")
+
+    if not os.path.isdir(plotdir):
+        os.makedirs(plotdir)
+    # plotdir = tempfile.mkdtemp()
 
     # output the data
     # in the format desired by NMMA
-    outfile = tempfile.NamedTemporaryFile(suffix=".dat", mode="w")
-    for line in nmma_data:
-        outfile.write(line[0] + " " + line[1] + " " + line[2] + " " + line[3] + "\n")
-    outfile.flush()
+    with tempfile.NamedTemporaryFile(
+        delete=False, suffix=".dat", prefix=f"{model_name}_", dir=plotdir, mode="w"
+    ) as outfile:
+        for line in nmma_data:
+            outfile.write(
+                line[0] + " " + line[1] + " " + line[2] + " " + line[3] + "\n"
+            )
+        outfile.flush()
 
-    data_out = loadEvent(outfile.name)
+        data_out = loadEvent(outfile.name)
 
-    # NMMA lightcurve fitting
-    # triggered with a shell command
-    command = subprocess.run(
-        "light_curve_analysis"
-        + " --model "
-        + model_name
-        + " --svd-path "
-        + svdmodel_directory
-        + " --outdir "
-        + plotdir
-        + " --label "
-        + cand_name
-        + "_"
-        + model_name
-        + " --trigger-time "
-        + str(trigger_time)
-        + " --data "
-        + outfile.name
-        + " --prior "
-        + prior
-        + " --tmin "
-        + str(tmin)
-        + " --tmax "
-        + str(tmax)
-        + " --dt "
-        + str(dt)
-        + " --error-budget "
-        + str(error_budget)
-        + " --nlive "
-        + str(nlive)
-        + " --Ebv-max "
-        + str(Ebv_max)
-        + " --interpolation_type "
-        + interpolation_type
-        + " --sampler "
-        + sampler,
-        shell=True,
-        capture_output=True,
-    )
-    sys.stdout.buffer.write(command.stdout)
-    sys.stderr.buffer.write(command.stderr)
+        # NMMA lightcurve fitting
+        # triggered with a shell command
+        command = subprocess.run(
+            "light_curve_analysis"
+            + " --model "
+            + model_name
+            + " --svd-path "
+            + svdmodel_directory
+            + " --outdir "
+            + plotdir
+            + " --label "
+            + cand_name
+            + "_"
+            + model_name
+            + " --trigger-time "
+            + str(trigger_time)
+            + " --data "
+            + outfile.name
+            + " --prior "
+            + prior
+            + " --tmin "
+            + str(tmin)
+            + " --tmax "
+            + str(tmax)
+            + " --dt "
+            + str(dt)
+            + " --error-budget "
+            + str(error_budget)
+            + " --nlive "
+            + str(nlive)
+            + " --Ebv-max "
+            + str(Ebv_max)
+            + " --interpolation_type "
+            + interpolation_type
+            + " --sampler "
+            + sampler,
+            shell=True,
+            capture_output=True,
+        )
+        sys.stdout.buffer.write(command.stdout)
+        sys.stderr.buffer.write(command.stderr)
 
-    ##############################
-    # Construct the best fit model
-    ##############################
+        ##############################
+        # Construct the best fit model
+        ##############################
 
-    plot_sample_times_KN = np.arange(0.0, 30.0, 0.1)
-    plot_sample_times_GRB = np.arange(30.0, 950.0, 1.0)
-    plot_sample_times = np.concatenate((plot_sample_times_KN, plot_sample_times_GRB))
-    posterior_file = os.path.join(
-        plotdir, cand_name + "_" + model_name + "_posterior_samples.dat"
-    )
-    json_file = os.path.join(plotdir, cand_name + "_" + model_name + "_result.json")
+        plot_sample_times_KN = np.arange(0.0, 30.0, 0.1)
+        plot_sample_times_GRB = np.arange(30.0, 950.0, 1.0)
+        plot_sample_times = np.concatenate(
+            (plot_sample_times_KN, plot_sample_times_GRB)
+        )
+        posterior_file = os.path.join(
+            plotdir, cand_name + "_" + model_name + "_posterior_samples.dat"
+        )
+        json_file = os.path.join(plotdir, cand_name + "_" + model_name + "_result.json")
 
-    with open(json_file, "r") as f:
-        lcDict = json.load(f)
+        with open(json_file, "r") as f:
+            lcDict = json.load(f)
 
-    log_bayes_factor = lcDict["log_bayes_factor"]
-    # log_evidence = lcDict["log_evidence"]
-    # log_evidence_err = lcDict["log_evidence_err"]
+        log_bayes_factor = lcDict["log_bayes_factor"]
+        # log_evidence = lcDict["log_evidence"]
+        # log_evidence_err = lcDict["log_evidence_err"]
 
-    (
-        posterior_samples,
-        bestfit_params,
-        bestfit_lightcurve_magKN_KNGRB,
-    ) = get_bestfit_lightcurve(
-        model_name,
-        posterior_file,
-        svdmodel_directory,
-        plot_sample_times,
-        interpolation_type=interpolation_type,
-    )
+        (
+            posterior_samples,
+            bestfit_params,
+            bestfit_lightcurve_magKN_KNGRB,
+        ) = get_bestfit_lightcurve(
+            model_name,
+            posterior_file,
+            svdmodel_directory,
+            plot_sample_times,
+            interpolation_type=interpolation_type,
+        )
 
-    # if fit_trigger_time:
-    #    trigger_time += bestfit_params['KNtimeshift']
+        # if fit_trigger_time:
+        #    trigger_time += bestfit_params['KNtimeshift']
 
-    plotName = os.path.join(plotdir, f"{model_name}_lightcurves.png")
-    plot_bestfit_lightcurve(
-        outfile.name,
-        bestfit_lightcurve_magKN_KNGRB,
-        error_budget,
-        trigger_time,
-        plotName,
-    )
+        plotName = os.path.join(plotdir, f"{model_name}_lightcurves.png")
+        plot_bestfit_lightcurve(
+            outfile.name,
+            bestfit_lightcurve_magKN_KNGRB,
+            error_budget,
+            trigger_time,
+            plotName,
+        )
 
     shutil.rmtree(plotdir)
 
@@ -217,3 +227,4 @@ def fit_lc(
         bestfit_lightcurve_magKN_KNGRB,
         log_bayes_factor,
     )
+    # outfile.close()
