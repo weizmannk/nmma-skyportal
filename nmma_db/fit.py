@@ -2,13 +2,14 @@ import subprocess
 import sys
 import os
 import json
+import base64
 
 import numpy as np
 from astropy.time import Time
 import tempfile
 import shutil
 
-from utils import get_bestfit_lightcurve, plot_bestfit_lightcurve
+from nmma_db.utils import get_bestfit_lightcurve, plot_bestfit_lightcurve
 
 from nmma.em.utils import loadEvent
 
@@ -19,7 +20,7 @@ def fit_lc(
     nmma_data,
     prior_directory="./priors",
     svdmodel_directory="./nmma/svdmodels",
-    interpolation_type="sklearn",
+    interpolation_type="sklearn_gp",
     sampler="pymultinest",
 ):
 
@@ -110,9 +111,13 @@ def fit_lc(
             else:
                 prior = f"{prior_directory}/ZTF_kn.prior"
         else:
-            print("nmma_fit.py does not know of the prior file for model ", model_name)
+            print("fit.py does not know of the prior file for model ", model_name)
             exit(1)
 
+    # we will need to write to temp files
+    # locally and then write their contents
+    # to the results dictionary for uploading
+    local_temp_files = []
     plotdir = os.path.abspath("..") + "/" + os.path.join("nmma_output")
 
     if not os.path.isdir(plotdir):
@@ -218,6 +223,8 @@ def fit_lc(
             trigger_time,
             plotName,
         )
+        plot_data = base64.b64encode(open(plotName, "rb").read())
+        local_temp_files.append(plotName)
 
     shutil.rmtree(plotdir)
 
@@ -226,5 +233,7 @@ def fit_lc(
         bestfit_params,
         bestfit_lightcurve_magKN_KNGRB,
         log_bayes_factor,
+        data_out,
+        plot_data,
+        local_temp_files,
     )
-    # outfile.close()

@@ -15,8 +15,11 @@ from tornado.ioloop import IOLoop
 import tornado.web
 import tornado.escape
 
+from astropy.time import Time
 from astropy.table import Table
-import nmma_fit
+
+from utils import parse_csv
+from fit import fit_lc
 
 from baselayer.log import make_log
 from baselayer.app.env import load_env
@@ -29,8 +32,18 @@ log = make_log("nmma_analysis_service")
 matplotlib.use("Agg")
 rng = np.random.default_rng()
 
-# ["Bu2019lm", "Ka2017", "nugent-hyper", "TrPi2018", "Piro2021"]
-default_analysis_parameters = {"source": "Bu2019lm", "fix_z": False}
+
+default_analysis_parameters = {
+    "interpolation_type": interpolation_type,
+    "svdmodel_dir": svdmodel_directory,
+    "prior_directory": prior_directory,
+    "interpolation_type": interpolation_type,
+    "sampler": sampler,
+}
+
+data_dict = {
+    "inputs": {"model": model_name, "photometry": nmma_data, "object_id": cand_name}
+}
 
 
 def upload_analysis_results(results, data_dict, request_timeout=60):
@@ -61,19 +74,21 @@ def upload_analysis_results(results, data_dict, request_timeout=60):
 
 def run_nmma_model(data_dict):
     """
-    Use `nmma` to fit data to a model with name `source_name`.
+    Use `nmma` to fit data to a model with name `model_name`.
     For this analysis, we expect the `inputs` dictionary to have the following keys:
-       - source: the name of the model to fit to the data
+       - model: the name of the model to fit to the data
        - fix_z: whether to fix the redshift
        - photometry: the photometry to fit to the model (in csv format)
        - redshift: the known redshift of the object
     Other analysis services may require additional keys in the `inputs` dictionary.
     """
-    analysis_parameters = data_dict["inputs"].get("analysis_parameters", {})
+    analysis_parameters = data_dict["inputs"].get(
+        "analysis_parameters", data_dict["inputs"]
+    )
     analysis_parameters = {**default_analysis_parameters, **analysis_parameters}
+    model = analysis_parameters.get("model")
 
-    source = analysis_parameters.get("source")
-    fix_z = analysis_parameters.get("fix_z") in [True, "True", "t", "true"]
+    # fix_z = analysis_parameters.get("fix_z") in [True, "True", "t", "true"]
 
     # this example analysis service expects the photometry to be in
     # a csv file (at data_dict["inputs"]["photometry"]) with the following columns
@@ -89,17 +104,15 @@ def run_nmma_model(data_dict):
     rez = {"status": "failure", "message": "", "analysis": {}}
     try:
         data = Table.read(data_dict["inputs"]["photometry"], format="ascii.csv")
-        data.rename_column("mjd", "jd")
-        data.rename_column("magsys", "mag")
         data.rename_column("magerr", "mag_unc")
         data.rename_column("limiting_mag", "limmag")
-
-        data["flux"].fill_value = 1e-6
+        data.rename_column("instruments", "programid")
+        # data["flux"].fill_value = 1e-6
         data = data.filled()
-        data.sort("time")
+        data.sort("jd")
 
-        redshift = Table.read(data_dict["inputs"]["redshift"], format="ascii.csv")
-        z = redshift["redshift"][0]
+        # redshift = Table.read(data_dict["inputs"]["redshift"], format="ascii.csv")
+        # z = redshift["redshift"][0]
     except Exception as e:
         rez.update(
             {
@@ -109,201 +122,27 @@ def run_nmma_model(data_dict):
         )
         return rez
 
-    # we will need to write to temp files
-    # locally and then write their contents
-    # to the results dictionary for uploading
-    local_temp_files = []
-
-    """
-    model_name = source
-    cand_name  = data['obj_id']
-    nmma_data  = data
-    prior_directory="../../../nmma/priors"
-    svdmodel_directory="../../../nmma/svdmodels"
-    gptype="sklearn"
-    sampler="pymultinest"
-
-    fitted_model= nmma_fit.fit_lc(
+    # fitting data by using nmma
+    fit_result = fit_lc(
         model_name,
         cand_name,
         nmma_data,
         prior_directory,
         svdmodel_directory,
-        gptype,
-        sampler
+        interpolation_type,
+        sampler,
     )
+
     """
+    result = (
+    posterior_samples,
+    bestfit_params,
+    bestfit_lightcurve_magKN_KNGRB,
+    log_bayes_factor,
+    nmma_input_file,
+    outfile,
+    data_out,
+    plot_data,
+    local_temp_files,)
 
-    try:
-        model = sncosmo.Model(source=source)
-
-        if fix_z:
-            if z is not None:
-                model.set(z=z)
-                bounds = {"z": (z, z)}
-            else:
-                raise ValueError("No redshift provided but `fix_z` requested.")
-        else:
-            bounds = {"z": (0.01, 1.0)}
-
-        # run the fit
-        result, fitted_model = sncosmo.fit_lc(
-            data,
-            model,
-            model.param_names,
-            bounds=bounds,
-        )
-
-        if result.success:
-            f = tempfile.NamedTemporaryFile(
-                suffix=".png", prefix="nmmaplot_", delete=False
-            )
-            f.close()
-            _ = sncosmo.plot_lc(
-                data,
-                model=fitted_model,
-                errors=result.errors,
-                model_label=source,
-                figtext=data_dict["resource_id"],
-                fname=f.name,
-            )
-
-            plot_data = base64.b64encode(open(f.name, "rb").read())
-            local_temp_files.append(f.name)
-
-            # make some draws from the posterior (simulating what we'd expect
-            # with an MCMC analysis)
-            post = rng.multivariate_normal(result.parameters, result.covariance, 10000)
-            post = post[np.newaxis, :]
-            # create an inference dataset
-            inference = az.convert_to_inference_data(
-                {x: post[:, :, i] for i, x in enumerate(result.param_names)}
-            )
-            f = tempfile.NamedTemporaryFile(
-                suffix=".nc", prefix="inferencedata_", delete=False
-            )
-            f.close()
-            inference.to_netcdf(f.name)
-            inference_data = base64.b64encode(open(f.name, "rb").read())
-            local_temp_files.append(f.name)
-
-            result.update({"source": source, "fix_z": fix_z})
-
-            f = tempfile.NamedTemporaryFile(
-                suffix=".joblib", prefix="results_", delete=False
-            )
-            f.close()
-            joblib.dump(result, f.name, compress=3)
-            result_data = base64.b64encode(open(f.name, "rb").read())
-            local_temp_files.append(f.name)
-
-            analysis_results = {
-                "inference_data": {"format": "netcdf4", "data": inference_data},
-                "plots": [{"format": "png", "data": plot_data}],
-                "results": {"format": "joblib", "data": result_data},
-            }
-            rez.update(
-                {
-                    "analysis": analysis_results,
-                    "status": "success",
-                    "message": f"Good results with chi^2/dof={result.chisq/result.ndof}",
-                }
-            )
-        else:
-            log("Fit failed.")
-            rez.update({"status": "failure", "message": "model failed to converge"})
-
-    except Exception as e:
-        log(f"Exception while running the model: {e}")
-        log(f"{traceback.format_exc()}")
-        log(f"Data: {data}")
-        rez.update({"status": "failure", "message": f"problem running the model {e}"})
-    finally:
-        # clean up local files
-        for f in local_temp_files:
-            try:
-                os.remove(f)
-            except:  # noqa E722
-                pass
-    return rez
-
-
-class MainHandler(tornado.web.RequestHandler):
-    def set_default_headers(self):
-        self.set_header("Content-Type", "application/json")
-
-    def error(self, code, message):
-        self.set_status(code)
-        self.write({"message": message})
-
-    def get(self):
-        self.write({"status": "active"})
-
-    def post(self):
-        """
-        Analysis endpoint which sends the `data_dict` off for
-        processing, returning immediately. The idea here is that
-        the analysis model may take awhile to run so we
-        need async behavior.
-        """
-        try:
-            data_dict = tornado.escape.json_decode(self.request.body)
-        except json.decoder.JSONDecodeError:
-            err = traceback.format_exc()
-            log(f"JSON decode error: {err}")
-            return self.error(400, "Invalid JSON")
-
-        required_keys = ["inputs", "callback_url", "callback_method"]
-        for key in required_keys:
-            if key not in data_dict:
-                log(f"missing required key {key} in data_dict")
-                return self.error(400, f"missing required key {key} in data_dict")
-
-        def sn_analysis_done_callback(
-            future,
-            logger=log,
-            data_dict=data_dict,
-        ):
-            """
-            Callback function for when the sn analysis service is done.
-            Sends back results/errors via the callback_url.
-            This is run synchronously after the future completes
-            so there is no need to await for `future`.
-            """
-            try:
-                result = future.result()
-            except Exception as e:
-                # catch all the exceptions and log them,
-                # try to write back to SkyPortal something
-                # informative.
-                logger(f"{str(future.exception())[:1024]} {e}")
-                result = {
-                    "status": "failure",
-                    "message": f"{str(future.exception())[:1024]}{e}",
-                }
-            finally:
-                upload_analysis_results(result, data_dict)
-
-        runner = functools.partial(run_sn_model, data_dict)
-        future_result = IOLoop.current().run_in_executor(None, runner)
-        future_result.add_done_callback(sn_analysis_done_callback)
-
-        return self.write(
-            {"status": "pending", "message": "sn_analysis_service: analysis started"}
-        )
-
-
-def make_app():
-    return tornado.web.Application(
-        [
-            (r"/analysis/demo_analysis", MainHandler),
-        ]
-    )
-
-
-if __name__ == "__main__":
-    sn_analysis = make_app()
-    port = cfg["analysis_services.sn_analysis_service.port"]
-    sn_analysis.listen(port)
-    log(f"Listening on port {port}")
-    tornado.ioloop.IOLoop.current().start()
+    """

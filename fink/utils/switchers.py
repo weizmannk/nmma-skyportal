@@ -15,5 +15,5 @@ def fid_to_filter_ztf(fid: int):
     return:
         filter(str): name of the filter
     """
-    switcher = {1: "ztfg", 2: "ztfr", 3: "ztfi"}
+    switcher = {1: "g", 2: "r", 3: "i"}
     return switcher.get(fid)

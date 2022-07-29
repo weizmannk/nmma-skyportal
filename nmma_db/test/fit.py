@@ -1,6 +1,7 @@
 import subprocess
 import sys
 import os
+from astropy.table import Table
 import json
 
 import numpy as np
@@ -19,7 +20,7 @@ def fit_lc(
     nmma_data,
     prior_directory="./priors",
     svdmodel_directory="./nmma/svdmodels",
-    interpolation_type="sklearn",
+    interpolation_type="sklearn_gp",
     sampler="pymultinest",
 ):
 
@@ -134,7 +135,8 @@ def fit_lc(
 
         # NMMA lightcurve fitting
         # triggered with a shell command
-        command = subprocess.run(
+
+        command_string = (
             "light_curve_analysis"
             + " --model "
             + model_name
@@ -167,7 +169,11 @@ def fit_lc(
             + " --interpolation_type "
             + interpolation_type
             + " --sampler "
-            + sampler,
+            + sampler
+        )
+
+        command = subprocess.run(
+            command_string,
             shell=True,
             capture_output=True,
         )
@@ -219,12 +225,13 @@ def fit_lc(
             plotName,
         )
 
-    shutil.rmtree(plotdir)
+    # shutil.rmtree(plotdir)
 
     return (
         posterior_samples,
         bestfit_params,
         bestfit_lightcurve_magKN_KNGRB,
         log_bayes_factor,
+        data_out,
+        outfile.name,
     )
-    # outfile.close()

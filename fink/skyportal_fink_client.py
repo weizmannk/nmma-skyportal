@@ -280,7 +280,7 @@ def extract_alert_data(alert: dict = None):
     instruments = ["CFH12k", "ZTF"]
     magsys = "ab"
     object_id = alert["objectId"]
-    mjd = Time(alert["candidate"]["jd"], format="jd").mjd
+    jd = alert["candidate"]["jd"]
     filter = fid_to_filter_ztf(alert["candidate"]["fid"])
     mag = alert["candidate"]["magpsf"]
     magerr = alert["candidate"]["sigmapsf"]
@@ -288,13 +288,13 @@ def extract_alert_data(alert: dict = None):
     ra = alert["candidate"]["ra"]
     dec = alert["candidate"]["dec"]
     return [
-        object_id,
-        mjd,
-        instruments,
-        filter,
+        jd,
         mag,
         magerr,
+        filter,
         limiting_mag,
+        instruments,
+        object_id,
         magsys,
         ra,
         dec,
