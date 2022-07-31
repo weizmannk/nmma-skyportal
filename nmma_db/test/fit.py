@@ -1,8 +1,8 @@
 import subprocess
 import sys
 import os
-from astropy.table import Table
 import json
+import base64
 
 import numpy as np
 from astropy.time import Time
@@ -18,10 +18,10 @@ def fit_lc(
     model_name,
     cand_name,
     nmma_data,
-    prior_directory="./priors",
-    svdmodel_directory="./nmma/svdmodels",
-    interpolation_type="sklearn_gp",
-    sampler="pymultinest",
+    prior_directory,
+    svdmodel_directory,
+    interpolation_type,
+    sampler,
 ):
 
     # Begin with stuff that may eventually replaced with something else,
@@ -111,9 +111,13 @@ def fit_lc(
             else:
                 prior = f"{prior_directory}/ZTF_kn.prior"
         else:
-            print("nmma_fit.py does not know of the prior file for model ", model_name)
+            print("fit.py does not know of the prior file for model ", model_name)
             exit(1)
 
+    # we will need to write to temp files
+    # locally and then write their contents
+    # to the results dictionary for uploading
+    local_temp_files = []
     plotdir = os.path.abspath("..") + "/" + os.path.join("nmma_output")
 
     if not os.path.isdir(plotdir):
@@ -135,8 +139,7 @@ def fit_lc(
 
         # NMMA lightcurve fitting
         # triggered with a shell command
-
-        command_string = (
+        command = subprocess.run(
             "light_curve_analysis"
             + " --model "
             + model_name
@@ -169,11 +172,7 @@ def fit_lc(
             + " --interpolation_type "
             + interpolation_type
             + " --sampler "
-            + sampler
-        )
-
-        command = subprocess.run(
-            command_string,
+            + sampler,
             shell=True,
             capture_output=True,
         )
@@ -224,6 +223,8 @@ def fit_lc(
             trigger_time,
             plotName,
         )
+        plot_data = base64.b64encode(open(plotName, "rb").read())
+        local_temp_files.append(plotName)
 
     # shutil.rmtree(plotdir)
 
@@ -233,5 +234,6 @@ def fit_lc(
         bestfit_lightcurve_magKN_KNGRB,
         log_bayes_factor,
         data_out,
-        outfile.name,
+        plot_data,
+        local_temp_files,
     )

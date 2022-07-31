@@ -9,7 +9,7 @@ fink_topics:
 - fink_early_sn_candidates_ztf
 fink_username: weizmann
 skyportal_group: NMMA-SkyPortal
-skyportal_token: 06b91ee9-92ab-4f3c-96a7-e725b8328fe7
+skyportal_token: 4723b4c2-8a24-40d0-9167-118ce8909a90
 skyportal_url: http://localhost:5000
 testing: false
 whitelisted: true

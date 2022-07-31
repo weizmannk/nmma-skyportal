@@ -11,13 +11,13 @@ import os
 import yaml
 
 
-def load_config(datapath: str, config_file: str = "config.yaml"):
+def load_config(datapath: str):
     """
     Open and  Converts a yaml configuration file to a dictionary.
     :param datapath(str): The path to the yaml file.
     :return: A dictionary.
     """
-    with open(f"{datapath}{config_file}", "r") as stream:
+    with open(f"{datapath}", "r") as stream:
         try:
             config = yaml.safe_load(stream)
         except yaml.YAMLError as exc:
@@ -25,7 +25,7 @@ def load_config(datapath: str, config_file: str = "config.yaml"):
     return config
 
 
-def dump_config(dict_file: dict, datapath: str, config_file: str = "config.yaml"):
+def dump_config(dict_file: dict, datapath: str):
 
     """Converts a dictionary to a yaml file.
     :param dict_file(dict): The dictionary to be converted.
@@ -33,14 +33,14 @@ def dump_config(dict_file: dict, datapath: str, config_file: str = "config.yaml"
     :return: Nothing.
     Save the yaml config file in the datapath directory.
     """
-    with open(f"{datapath}{config_file}", "w") as stream:
+    with open(f"{datapath}", "w") as stream:
         try:
             yaml.dump(dict_file, stream)
         except yaml.YAMLError as exc:
             print(exc)
 
 
-def get_skyportal_admin_token(datapath: str, admin_token: str = ".tokens.yaml"):
+def get_skyportal_admin_token(datapath: str):
 
     """Read the new skyportal token in a dict
         in the yaml config file.
@@ -50,14 +50,12 @@ def get_skyportal_admin_token(datapath: str, admin_token: str = ".tokens.yaml"):
 
     Returns: skyportal admin token
     """
-    token = load_config(datapath, admin_token)
+    token = load_config(datapath)
 
     return token["INITIAL_ADMIN"]
 
 
-def update_config_file(
-    config_path: str, config_file, skyportal_token_path, admin_token
-):
+def update_config_file(config_path: str, skyportal_token_path):
 
     """
     Args:
@@ -68,12 +66,10 @@ def update_config_file(
     Returns: skyportal admin token
     """
     try:
-        config = load_config(config_path, config_file)
-        config["skyportal_token"] = get_skyportal_admin_token(
-            skyportal_token_path, admin_token
-        )
-        config["fink_topics"] = config["fink_topics"]
-        dump_config(config, config_path, config_file)
+        config = load_config(config_path)
+        config["skyportal_token"] = get_skyportal_admin_token(skyportal_token_path)
+        # config["fink_topics"] = config["fink_topics"]
+        dump_config(config, config_path)
 
     except Exception as exc:
         print(exc)

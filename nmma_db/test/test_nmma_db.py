@@ -6,7 +6,7 @@ from utils import parse_csv
 from fit import fit_lc
 
 
-infile = "../data/kilonova_BNS_lc.csv"
+infile = "../data/tableDownload.csv"
 
 # Read and conver csv file from
 nmma_data = parse_csv(infile)
@@ -15,10 +15,21 @@ nmma_data = parse_csv(infile)
 model_name = "Bu2019lm"
 cand_name = "kilonova_BNS_lc"
 
-prior_directory = "../../priors"
-svdmodel_directory = "/home/wkiendrebeogo/Projets/NMMA/nmma/svdmodels/"
+prior_dir = "../../priors"
+svdmodel_dir = "/home/wkiendrebeogo/Projets/NMMA/nmma/svdmodels/"
 interpolation_type = "tensorflow"  # "sklearn_gp"
 sampler = "pymultinest"
+
+
+data_dict = {
+    "inputs": {
+        "model": model_name,
+        "photometry": infile,
+        "object_id": cand_name,
+        "interpolation_type": interpolation_type,
+    }
+}
+
 
 (
     posterior_samples,

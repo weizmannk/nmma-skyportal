@@ -22,21 +22,20 @@ import pandas as pd
 
 
 # config.yaml file dir
-config = "config.yaml"
-config_file_path = os.path.join(os.path.dirname(__file__)) + "/../"
+config_file_path = os.path.join(os.path.dirname(__file__)) + "/../config.yaml"
 
 # skyportal admin token dir
-admin_token = ".tokens.yaml"
 skyportal_token_path = (
-    os.path.abspath(os.path.join(os.path.dirname(__file__))) + "/../../skyportal/"
+    os.path.abspath(os.path.join(os.path.dirname(__file__)))
+    + "/../../skyportal/.tokens.yaml"
 )
 # Copy the neww token in the config file
-file.update_config_file(config_file_path, config, skyportal_token_path, admin_token)
+file.update_config_file(config_file_path, skyportal_token_path)
 
 # open yaml config file
-conf = file.load_config(config_file_path, config)
+conf = file.load_config(config_file_path)
 
-taxonomy_dict = config_file.yaml_to_dict(
+taxonomy_dict = file.load_config(
     os.path.abspath(os.path.join(os.path.dirname(__file__))) + "/data/taxonomy.yaml"
 )
 
@@ -46,8 +45,7 @@ schema = os.path.abspath(
 
 # Read skyportal admin token from skyportal directory
 # admin_token = ".tokens.yaml"
-
-skyportal_token = file.get_skyportal_admin_token(skyportal_token_path, admin_token)
+skyportal_token = file.get_skyportal_admin_token(skyportal_token_path)
 
 
 def init_skyportal(
@@ -280,7 +278,7 @@ def extract_alert_data(alert: dict = None):
     instruments = ["CFH12k", "ZTF"]
     magsys = "ab"
     object_id = alert["objectId"]
-    jd = alert["candidate"]["jd"]
+    mjd = Time(alert["candidate"]["jd"], format="jd").mjd
     filter = fid_to_filter_ztf(alert["candidate"]["fid"])
     mag = alert["candidate"]["magpsf"]
     magerr = alert["candidate"]["sigmapsf"]
@@ -288,13 +286,13 @@ def extract_alert_data(alert: dict = None):
     ra = alert["candidate"]["ra"]
     dec = alert["candidate"]["dec"]
     return [
-        jd,
+        object_id,
+        mjd,
+        instruments,
+        filter,
         mag,
         magerr,
-        filter,
         limiting_mag,
-        instruments,
-        object_id,
         magsys,
         ra,
         dec,
