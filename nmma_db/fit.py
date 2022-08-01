@@ -9,7 +9,7 @@ from astropy.time import Time
 import tempfile
 import shutil
 
-from nmma_db.utils import get_bestfit_lightcurve, plot_bestfit_lightcurve
+from utils import get_bestfit_lightcurve, plot_bestfit_lightcurve
 
 from nmma.em.utils import loadEvent
 
@@ -18,10 +18,10 @@ def fit_lc(
     model_name,
     cand_name,
     nmma_data,
-    prior_directory="./priors",
-    svdmodel_directory="./nmma/svdmodels",
-    interpolation_type="sklearn_gp",
-    sampler="pymultinest",
+    prior_directory,
+    svdmodel_directory,
+    interpolation_type,
+    sampler,
 ):
 
     # Begin with stuff that may eventually replaced with something else,
@@ -226,7 +226,7 @@ def fit_lc(
         plot_data = base64.b64encode(open(plotName, "rb").read())
         local_temp_files.append(plotName)
 
-    shutil.rmtree(plotdir)
+    # shutil.rmtree(plotdir)
 
     return (
         posterior_samples,

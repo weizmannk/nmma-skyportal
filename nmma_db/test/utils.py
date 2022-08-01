@@ -117,7 +117,7 @@ def parse_csv(infile):
 
     for line in in_data[:]:
         # extract time and put in isot format
-        time = Time(line[1], format="mjd").isot
+        time = Time(line[1], format="jd").isot
 
         filter = line[4]
 
