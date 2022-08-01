@@ -1,0 +1,2 @@
+"obj_id","ra","dec","filter","mjd","snr","instrument_id","instrument_name","ra_unc","dec_unc","origin","id","altdata","mag","magerr","magsys","limiting_mag"
+"ZTF22aalofsq","217.2208811","-10.6191667","ztfr","59756.19035879988","5.712269579132535","1","ZTF","","","None","2668","","19.920007705688477","0.19007089734077454","ab","20.400371551513672"
