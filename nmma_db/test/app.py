@@ -82,8 +82,8 @@ def run_nmma_model(data_dict):
 
     model_name = analysis_parameters.get("model")
     # cand_name = analysis_parameters.get("object_id")
-    prior_directory = analysis_parameters.get("prior_dir")
-    svdmodel_directory = analysis_parameters.get("svdmodel_dir")
+    prior_dir = analysis_parameters.get("prior_directory")
+    svdmodel_dir = analysis_parameters.get("svdmodel_directory")
     interpolation_type = analysis_parameters.get("interpolation_type")
     sampler = analysis_parameters.get("sampler")
 
@@ -103,28 +103,67 @@ def run_nmma_model(data_dict):
     rez = {"status": "failure", "message": "", "analysis": {}}
     try:
         data = Table.read(data_dict["inputs"]["photometry"], format="ascii.csv")
-        data.rename_column("magerr", "mag_unc")
-        data.rename_column("limiting_mag", "limmag")
-        data.rename_column("instrument_name", "programid")
 
-        if data["filter"] == "ztfr":
-            data["filter"] = "r"
-        elif data["filter"] == "ztfg":
-            data["filter"] = "g"
-        elif data["filter"] == "ztfi":
-            data["filter"] = "i"
+        time_format = ["mjd", "jd"]
+        if col == "mjd":
+            # convert time in julien day format (jd)
+            # check if time is really in mjd format
+            # if data["mjd"] is in mjd time < 0
+            try:
+                time = Time(data["mjd"][0], format="jd").mjd
+
+            except KeyError:
+                print(f" Sorry the name: {col} does not exits")
+
+            else:
+                if time < 0:
+                    data["mjd"] = Time(data["mjd"], format="mjd").jd
+
+            data.rename_column("mjd", "jd")
+
+        # check if the time is in  jd format
         else:
-            data["filter"] = data["filter"]
+            try:
+                time = Time(data["jd"][0], format="jd").mjd
+            except KeyError:
+                print(f" Sorry the name: {col} does not exits")
 
-        # convert time in julien day format
-        jd = Time(data["mjd"], format="mjd").jd
-        data["jd"] = jd
+            else:
+                if time < 0:
+                    data["jd"] = Time(data["jd"], format="mjd").jd
+
+        # Rename Columns from skyportal to nmma format
+        skyportal_col = ["magerr", "limiting_mag", "instrument_name"]
+
+        for col in skyportal_col:
+            if col == "magerr":
+                data.rename_column("magerr", "mag_unc")
+
+            elif col == "limmiting_mag":
+                data.rename_column("limiting_mag", "limmag")
+
+            elif col == "instrument_name":
+                data.rename_column("instrument_name", "programid")
+        else:
+            continue
+
+        for filt in ["ztfr", "ztfg", "ztfi"]:
+            index = np.where(data["filter"] == filt)
+
+            if filt == "ztfr":
+                data["filter"][index] = "r"
+            elif filt == "ztfg":
+                data["filter"][index] = "g"
+            elif filt == "ztfi":
+                data["filter"][index] = "i"
+            else:
+                data["filter"][index] = filt
 
         data = data.filled()
         data.sort("jd")
 
         # Object ID
-        cand_name = data["obj_id"]
+        cand_name = "weizmann"  # data["obj_id"]
 
     except Exception as e:
         rez.update(
@@ -136,24 +175,25 @@ def run_nmma_model(data_dict):
         return rez
 
     # Create a temporary file to save data in nmma csv format
-    plotdir = os.path.abspath("..") + "/" + os.path.join("nmma_output")
-    if not os.path.isdir(plotdir):
-        os.makedirs(plotdir)
-    # plotdir = tempfile.mkdtemp()
 
+    # plotdir = os.path.abspath("..") + "/" + os.path.join("nmma_output")
+    # if not os.path.isdir(plotdir):
+    #   os.makedirs(plotdir)
+
+    plotdir = tempfile.mkdtemp()
     with tempfile.NamedTemporaryFile(
         delete=False, suffix=".csv", dir=plotdir, mode="w"
     ) as outfile:
-        Table(
-            {
-                "jd": data["jd"],
-                "mag": data["mag"],
-                "mag_unc": data["mag_unc"],
-                "filter": data["filter"],
-                "limmag": data["limmag"],
-                "programid": data["programid"],
-            }
-        ).write(outfile, overwrite=True, format="ascii.csv")
+        Data = Table()
+        Data["jd"] = data["jd"]
+        Data["mag"] = data["mag"]
+        Data["mag_unc"] = data["mag_unc"]
+        Data["filter"] = data["filter"]
+        Data["limmag"] = data["limmag"]
+        Data["programid"] = data["programid"]
+
+        df = Data.to_pandas()
+        df.to_csv(outfile)
 
         # infile take the  photometry csv file readable by nmma format
         # Parses a file format with a single candidate
@@ -164,22 +204,25 @@ def run_nmma_model(data_dict):
             model_name,
             cand_name,
             nmma_data,
-            prior_directory,
-            svdmodel_directory,
+            prior_dir,
+            svdmodel_dir,
             interpolation_type,
             sampler,
         )
 
-        """
-        result = (
-        posterior_samples,
-        bestfit_params,
-        bestfit_lightcurve_magKN_KNGRB,
-        log_bayes_factor,
-        nmma_input_file,
-        outfile,
-        data_out,
-        plot_data,
-        local_temp_files,)
+        return fit_result
 
-        """
+
+"""
+result = (
+posterior_samples,
+bestfit_params,
+bestfit_lightcurve_magKN_KNGRB,
+log_bayes_factor,
+nmma_input_file,
+outfile,
+data_out,
+plot_data,
+local_temp_files,)
+
+"""

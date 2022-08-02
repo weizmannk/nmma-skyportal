@@ -6,14 +6,14 @@ from utils import parse_csv
 from fit import fit_lc
 
 
-infile = "../data/tableDownload.csv"
+infile = "../data/lc_ZTF21abdpqpq_forced1_stacked0.csv"
 
 # Read and conver csv file from
-nmma_data = parse_csv(infile)
+# nmma_data = parse_csv(infile)
 
 
 model_name = "Bu2019lm"
-cand_name = "kilonova_BNS_lc"
+cand_name = "lc_ZTF21abdpqpq_forced1_stacked0"
 
 prior_dir = "../../priors"
 svdmodel_dir = "/home/wkiendrebeogo/Projets/NMMA/nmma/svdmodels/"
