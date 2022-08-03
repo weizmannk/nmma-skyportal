@@ -18,8 +18,10 @@ import tornado.escape
 from astropy.time import Time
 from astropy.table import Table
 from astropy.io import ascii
+
 from utils import parse_csv
 from fit import fit_lc
+from nmma_process import skyportal_input_to_nmma
 
 from baselayer.log import make_log
 from baselayer.app.env import load_env
@@ -70,9 +72,7 @@ def run_nmma_model(data_dict):
     Use `nmma` to fit data to a model with name `model_name`.
     For this analysis, we expect the `inputs` dictionary to have the following keys:
        - model: the name of the model to fit to the data
-       - fix_z: whether to fix the redshift
        - photometry: the photometry to fit to the model (in csv format)
-       - redshift: the known redshift of the object
     Other analysis services may require additional keys in the `inputs` dictionary.
     """
     analysis_parameters = data_dict["inputs"].get(
@@ -87,100 +87,15 @@ def run_nmma_model(data_dict):
     interpolation_type = analysis_parameters.get("interpolation_type")
     sampler = analysis_parameters.get("sampler")
 
-    # fix_z = analysis_parameters.get("fix_z") in [True, "True", "t", "true"]
-
-    # this example analysis service expects the photometry to be in
-    # a csv file (at data_dict["inputs"]["photometry"]) with the following columns
-    # - filter: the name of the bandpass
-    # - mjd: the modified Julian date of the observation
-    # - magsys: the mag system (e.g. ab) of the observations
-    # - limiting_mag:
-    # - magerr:
-    # - flux: the flux of the observation
-    # the following code transforms these inputs from SkyPortal
-    # to the format expected by nmma.
-    #
-    rez = {"status": "failure", "message": "", "analysis": {}}
-    try:
-        data = Table.read(data_dict["inputs"]["photometry"], format="ascii.csv")
-
-        time_format = ["mjd", "jd"]
-        if col == "mjd":
-            # convert time in julien day format (jd)
-            # check if time is really in mjd format
-            # if data["mjd"] is in mjd time < 0
-            try:
-                time = Time(data["mjd"][0], format="jd").mjd
-
-            except KeyError:
-                print(f" Sorry the name: {col} does not exits")
-
-            else:
-                if time < 0:
-                    data["mjd"] = Time(data["mjd"], format="mjd").jd
-
-            data.rename_column("mjd", "jd")
-
-        # check if the time is in  jd format
-        else:
-            try:
-                time = Time(data["jd"][0], format="jd").mjd
-            except KeyError:
-                print(f" Sorry the name: {col} does not exits")
-
-            else:
-                if time < 0:
-                    data["jd"] = Time(data["jd"], format="mjd").jd
-
-        # Rename Columns from skyportal to nmma format
-        skyportal_col = ["magerr", "limiting_mag", "instrument_name"]
-
-        for col in skyportal_col:
-            if col == "magerr":
-                data.rename_column("magerr", "mag_unc")
-
-            elif col == "limmiting_mag":
-                data.rename_column("limiting_mag", "limmag")
-
-            elif col == "instrument_name":
-                data.rename_column("instrument_name", "programid")
-        else:
-            continue
-
-        for filt in ["ztfr", "ztfg", "ztfi"]:
-            index = np.where(data["filter"] == filt)
-
-            if filt == "ztfr":
-                data["filter"][index] = "r"
-            elif filt == "ztfg":
-                data["filter"][index] = "g"
-            elif filt == "ztfi":
-                data["filter"][index] = "i"
-            else:
-                data["filter"][index] = filt
-
-        data = data.filled()
-        data.sort("jd")
-
-        # Object ID
-        cand_name = "weizmann"  # data["obj_id"]
-
-    except Exception as e:
-        rez.update(
-            {
-                "status": "failure",
-                "message": f"input data is not in the expected format {e}",
-            }
-        )
-        return rez
+    # read csv file from nmma process
+    data = skyportal_input_to_nmma(data_dict["inputs"]["photometry"])
 
     # Create a temporary file to save data in nmma csv format
+    plotdir = os.path.abspath("..") + "/" + os.path.join("nmma_output")
+    if not os.path.isdir(plotdir):
+        os.makedirs(plotdir)
 
-    # plotdir = os.path.abspath("..") + "/" + os.path.join("nmma_output")
-    # if not os.path.isdir(plotdir):
-    #   os.makedirs(plotdir)
-
-    plotdir = tempfile.mkdtemp()
+    # plotdir = tempfile.mkdtemp()
     with tempfile.NamedTemporaryFile(
         delete=False, suffix=".csv", dir=plotdir, mode="w"
     ) as outfile:
