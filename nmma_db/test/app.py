@@ -41,6 +41,26 @@ default_analysis_parameters = {
 }
 
 
+infile = "../data/lc_ZTF21abdpqpq_forced1_stacked0.csv"
+
+model_name = "Bu2019lm"
+cand_name = "lc_ZTF21abdpqpq_forced1_stacked0"
+
+prior_directory = "../../priors"
+svdmodel_directory = "/home/wkiendrebeogo/Projets/NMMA/nmma/svdmodels/"
+interpolation_type = "sklearn_gp"
+sampler = "pymultinest"
+
+data_dict = {
+    "inputs": {
+        "model": model_name,
+        "photometry": infile,
+        "object_id": cand_name,
+        "interpolation_type": interpolation_type,
+    }
+}
+
+
 def upload_analysis_results(results, data_dict, request_timeout=60):
     """
     Upload the results to the webhook.
@@ -67,6 +87,65 @@ def upload_analysis_results(results, data_dict, request_timeout=60):
         log(f"Callback exception {e}.")
 
 
+def convert_csv(data_dict):
+
+    # this example analysis service expects the photometry to be in
+    # a csv file (at data_dict["inputs"]["photometry"]) with the following columns
+    # - filter: the name of the bandpass
+    # - mjd: the modified Julian date of the observation
+    # - magsys: the mag system (e.g. ab) of the observations
+    # - limiting_mag:
+    # - magerr:
+    # - flux: the flux of the observation
+    # the following code transforms these inputs from SkyPortal
+    # to the format expected by nmma.
+    # And makes sure thate the times is in correct format
+    # We need to convert the time format mjd to the format expected by of session so in jd
+    # the utils.py  file need jd format which will be convert in isot
+    # Rename Columns from skyportal to nmma format
+    # skyportal_col = ["mjd", "magerr", "limiting_mag", "instrument_name", obj_id]
+
+    try:
+        rez = {"status": "failure", "message": "", "analysis": {}}
+        data = Table.read(data_dict["inputs"]["photometry"], format="ascii.csv")
+
+        data.rename_column("magerr", "mag_unc")
+        data.rename_column("limiting_mag", "limmag")
+        data.rename_column("instrument_name", "programid")
+
+        # convert time in julien day format (jd)
+        data["mjd"] = Time(data["mjd"], format="mjd").jd
+        data.rename_column("mjd", "jd")
+
+        # Rename filter
+        switcher = {1: "ztfg", 2: "ztfr", 3: "ztfi"}
+        for filt in switcher.values():
+            index = np.where(data["filter"] == filt)
+
+            if filt == "ztfg":
+                data["filter"][index] = "g"
+            elif filt == "ztfr":
+                data["filter"][index] = "r"
+            elif filt == "ztfi":
+                data["filter"][index] = "i"
+            else:
+                data["filter"][index] = filt
+
+        data = data.filled()
+        data.sort("jd")
+
+    except Exception as e:
+        rez.update(
+            {
+                "status": "failure",
+                "message": f"input data is not in the expected format {e}",
+            }
+        )
+        return rez
+
+    return data
+
+
 def run_nmma_model(data_dict):
     """
     Use `nmma` to fit data to a model with name `model_name`.
@@ -75,6 +154,7 @@ def run_nmma_model(data_dict):
        - photometry: the photometry to fit to the model (in csv format)
     Other analysis services may require additional keys in the `inputs` dictionary.
     """
+
     analysis_parameters = data_dict["inputs"].get(
         "analysis_parameters", data_dict["inputs"]
     )
@@ -82,14 +162,14 @@ def run_nmma_model(data_dict):
 
     model_name = analysis_parameters.get("model")
     # cand_name = analysis_parameters.get("object_id")
-    prior_dir = analysis_parameters.get("prior_directory")
-    svdmodel_dir = analysis_parameters.get("svdmodel_directory")
+    prior_directory = analysis_parameters.get("prior_directory")
+    svdmodel_directory = analysis_parameters.get("svdmodel_directory")
     interpolation_type = analysis_parameters.get("interpolation_type")
     sampler = analysis_parameters.get("sampler")
 
-    # read csv file from nmma process
-    data = skyportal_input_to_nmma(data_dict["inputs"]["photometry"])
-
+    # read data and create a cvs file expecte to nmma
+    # data = convert_csv(data_dict)
+    data = Table.read(data_dict["inputs"]["photometry"], format="ascii.csv")
     # Create a temporary file to save data in nmma csv format
     plotdir = os.path.abspath("..") + "/" + os.path.join("nmma_output")
     if not os.path.isdir(plotdir):
@@ -110,6 +190,8 @@ def run_nmma_model(data_dict):
         df = Data.to_pandas()
         df.to_csv(outfile)
 
+        cand_name = "ztf_id"
+
         # infile take the  photometry csv file readable by nmma format
         # Parses a file format with a single candidate
         infile = outfile.name
@@ -119,13 +201,16 @@ def run_nmma_model(data_dict):
             model_name,
             cand_name,
             nmma_data,
-            prior_dir,
-            svdmodel_dir,
+            prior_directory,
+            svdmodel_directory,
             interpolation_type,
             sampler,
         )
 
-        return fit_result
+    return fit_result
+
+
+run_nmma_model(data_dict)
 
 
 """

@@ -15,11 +15,10 @@ infile = "../data/lc_ZTF21abdpqpq_forced1_stacked0.csv"
 model_name = "Bu2019lm"
 cand_name = "lc_ZTF21abdpqpq_forced1_stacked0"
 
-prior_dir = "../../priors"
-svdmodel_dir = "/home/wkiendrebeogo/Projets/NMMA/nmma/svdmodels/"
-interpolation_type = "tensorflow"  # "sklearn_gp"
+prior_directory = "../../priors"
+svdmodel_directory = "/home/wkiendrebeogo/Projets/NMMA/nmma/svdmodels/"
+interpolation_type = "sklearn_gp"
 sampler = "pymultinest"
-
 
 data_dict = {
     "inputs": {
