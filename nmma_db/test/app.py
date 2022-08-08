@@ -1,6 +1,5 @@
 import os
 import functools
-import tempfile
 import base64
 import traceback
 import json
@@ -15,6 +14,8 @@ from tornado.ioloop import IOLoop
 import tornado.web
 import tornado.escape
 
+import tempfile
+import shutil
 from astropy.time import Time
 from astropy.table import Table
 from astropy.io import ascii
@@ -25,6 +26,8 @@ from nmma_process import skyportal_input_to_nmma
 
 from baselayer.log import make_log
 from baselayer.app.env import load_env
+
+from tqdm.auto import tqdm
 
 _, cfg = load_env()
 log = make_log("nmma_analysis_service")
@@ -161,7 +164,7 @@ def run_nmma_model(data_dict):
     analysis_parameters = {**default_analysis_parameters, **analysis_parameters}
 
     model_name = analysis_parameters.get("model")
-    # cand_name = analysis_parameters.get("object_id")
+    cand_name = analysis_parameters.get("object_id")
     prior_directory = analysis_parameters.get("prior_directory")
     svdmodel_directory = analysis_parameters.get("svdmodel_directory")
     interpolation_type = analysis_parameters.get("interpolation_type")
@@ -171,6 +174,7 @@ def run_nmma_model(data_dict):
     # data = convert_csv(data_dict)
     data = Table.read(data_dict["inputs"]["photometry"], format="ascii.csv")
     # Create a temporary file to save data in nmma csv format
+
     plotdir = os.path.abspath("..") + "/" + os.path.join("nmma_output")
     if not os.path.isdir(plotdir):
         os.makedirs(plotdir)
@@ -179,6 +183,7 @@ def run_nmma_model(data_dict):
     with tempfile.NamedTemporaryFile(
         delete=False, suffix=".csv", dir=plotdir, mode="w"
     ) as outfile:
+
         Data = Table()
         Data["jd"] = data["jd"]
         Data["mag"] = data["mag"]
@@ -189,8 +194,7 @@ def run_nmma_model(data_dict):
 
         df = Data.to_pandas()
         df.to_csv(outfile)
-
-        cand_name = "ztf_id"
+        outfile.flush()
 
         # infile take the  photometry csv file readable by nmma format
         # Parses a file format with a single candidate
@@ -206,23 +210,17 @@ def run_nmma_model(data_dict):
             interpolation_type,
             sampler,
         )
+        shutil.rmtree(plotdir)
 
     return fit_result
 
 
-run_nmma_model(data_dict)
-
-
-"""
-result = (
-posterior_samples,
-bestfit_params,
-bestfit_lightcurve_magKN_KNGRB,
-log_bayes_factor,
-nmma_input_file,
-outfile,
-data_out,
-plot_data,
-local_temp_files,)
-
-"""
+(
+    posterior_samples,
+    bestfit_params,
+    bestfit_lightcurve_magKN_KNGRB,
+    log_bayes_factor,
+    data_out,
+    plot_data,
+    local_temp_files,
+) = run_nmma_model(data_dict)

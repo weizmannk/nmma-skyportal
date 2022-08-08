@@ -226,7 +226,7 @@ def fit_lc(
         plot_data = base64.b64encode(open(plotName, "rb").read())
         local_temp_files.append(plotName)
 
-    # shutil.rmtree(plotdir)
+    shutil.rmtree(plotdir)
 
     return (
         posterior_samples,
