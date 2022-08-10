@@ -237,13 +237,13 @@ class MainHandler(tornado.web.RequestHandler):
                 log(f"missing required key {key} in data_dict")
                 return self.error(400, f"missing required key {key} in data_dict")
 
-        def sn_analysis_done_callback(
+        def nmma_analysis_done_callback(
             future,
             logger=log,
             data_dict=data_dict,
         ):
             """
-            Callback function for when the sn analysis service is done.
+            Callback function for when the nmma analysis service is done.
             Sends back results/errors via the callback_url.
             This is run synchronously after the future completes
             so there is no need to await for `future`.
@@ -262,12 +262,12 @@ class MainHandler(tornado.web.RequestHandler):
             finally:
                 upload_analysis_results(result, data_dict)
 
-        runner = functools.partial(run_sn_model, data_dict)
+        runner = functools.partial(run_nmma_model, data_dict)
         future_result = IOLoop.current().run_in_executor(None, runner)
-        future_result.add_done_callback(sn_analysis_done_callback)
+        future_result.add_done_callback(nmma_analysis_done_callback)
 
         return self.write(
-            {"status": "pending", "message": "sn_analysis_service: analysis started"}
+            {"status": "pending", "message": "nmma_analysis_service: analysis started"}
         )
 
 
@@ -280,8 +280,8 @@ def make_app():
 
 
 if __name__ == "__main__":
-    sn_analysis = make_app()
-    port = cfg["analysis_services.sn_analysis_service.port"]
-    sn_analysis.listen(port)
+    nmma_analysis = make_app()
+    port = cfg["analysis_services.nmma_analysis_service.port"]
+    nmma_analysis.listen(port)
     log(f"Listening on port {port}")
     tornado.ioloop.IOLoop.current().start()

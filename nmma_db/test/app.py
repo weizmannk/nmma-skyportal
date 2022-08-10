@@ -238,7 +238,9 @@ def run_nmma_model(data_dict):
                         {
                             "analysis": analysis_results,
                             "status": "success",
-                            "message": f" Inference results of inference with {fit_result.log_bayes_factor}",
+                            "message": f" Inference results of inference with "
+                            + r"$\log(bayes-factor)$"
+                            + f" = { fit_result.log_bayes_factor}",
                         }
                     )
             else:
@@ -256,7 +258,88 @@ def run_nmma_model(data_dict):
     return rez
 
 
-result = run_nmma_model(data_dict)
+class MainHandler(tornado.web.RequestHandler):
+    def set_default_headers(self):
+        self.set_header("Content-Type", "application/json")
+
+    def error(self, code, message):
+        self.set_status(code)
+        self.write({"message": message})
+
+    def get(self):
+        self.write({"status": "active"})
+
+    def post(self):
+        """
+        Analysis endpoint which sends the `data_dict` off for
+        processing, returning immediately. The idea here is that
+        the analysis model may take awhile to run so we
+        need async behavior.
+        """
+        try:
+            data_dict = tornado.escape.json_decode(self.request.body)
+        except json.decoder.JSONDecodeError:
+            err = traceback.format_exc()
+            log(f"JSON decode error: {err}")
+            return self.error(400, "Invalid JSON")
+
+        required_keys = ["inputs", "callback_url", "callback_method"]
+        for key in required_keys:
+            if key not in data_dict:
+                log(f"missing required key {key} in data_dict")
+                return self.error(400, f"missing required key {key} in data_dict")
+
+        def nmma_analysis_done_callback(
+            future,
+            logger=log,
+            data_dict=data_dict,
+        ):
+            """
+            Callback function for when the nmma analysis service is done.
+            Sends back results/errors via the callback_url.
+            This is run synchronously after the future completes
+            so there is no need to await for `future`.
+            """
+            try:
+                result = future.result()
+            except Exception as e:
+                # catch all the exceptions and log them,
+                # try to write back to SkyPortal something
+                # informative.
+                logger(f"{str(future.exception())[:1024]} {e}")
+                result = {
+                    "status": "failure",
+                    "message": f"{str(future.exception())[:1024]}{e}",
+                }
+            finally:
+                upload_analysis_results(result, data_dict)
+
+        runner = functools.partial(run_nmma_model, data_dict)
+        future_result = IOLoop.current().run_in_executor(None, runner)
+        future_result.add_done_callback(nmma_analysis_done_callback)
+
+        return self.write(
+            {"status": "pending", "message": "nmma_analysis_service: analysis started"}
+        )
+
+
+def make_app():
+    return tornado.web.Application(
+        [
+            (r"/analysis/demo_analysis", MainHandler),
+        ]
+    )
+
+
+if __name__ == "__main__":
+    nmma_analysis = make_app()
+    port = cfg["analysis_services.nmma_analysis_service.port"]
+    nmma_analysis.listen(port)
+    log(f"Listening on port {port}")
+    tornado.ioloop.IOLoop.current().start()
+
+
+# result = run_nmma_model(data_dict)
 
 
 """
