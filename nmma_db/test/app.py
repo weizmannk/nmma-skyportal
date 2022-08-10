@@ -27,8 +27,6 @@ from nmma_process import skyportal_input_to_nmma
 from baselayer.log import make_log
 from baselayer.app.env import load_env
 
-from tqdm.auto import tqdm
-
 _, cfg = load_env()
 log = make_log("nmma_analysis_service")
 
@@ -44,7 +42,7 @@ default_analysis_parameters = {
 }
 
 
-infile = "../data/lc_ZTF21abdpqpq_forced1_stacked0.csv"
+infile = "../data/kilonova_BNS_lc.csv"
 
 model_name = "Bu2019lm"
 cand_name = "lc_ZTF21abdpqpq_forced1_stacked0"
@@ -112,13 +110,22 @@ def convert_csv(data_dict):
         rez = {"status": "failure", "message": "", "analysis": {}}
         data = Table.read(data_dict["inputs"]["photometry"], format="ascii.csv")
 
-        data.rename_column("magerr", "mag_unc")
-        data.rename_column("limiting_mag", "limmag")
-        data.rename_column("instrument_name", "programid")
+        # data.rename_column("magerr", "mag_unc")
+        # data.rename_column("limiting_mag", "limmag")
+        # data.rename_column("instrument_name", "programid")
+        for col in data.columns:
+            if col == "magerr":
+                data.rename_column("magerr", "mag_unc")
+
+            elif col == "limmiting_mag":
+                data.rename_column("limiting_mag", "limmag")
+
+            elif col == "instrument_name":
+                data.rename_column("instrument_name", "programid")
 
         # convert time in julien day format (jd)
-        data["mjd"] = Time(data["mjd"], format="mjd").jd
-        data.rename_column("mjd", "jd")
+        data["jd"] = Time(data["jd"], format="mjd").jd
+        # data.rename_column("mjd", "jd")
 
         # Rename filter
         switcher = {1: "ztfg", 2: "ztfr", 3: "ztfi"}
@@ -171,49 +178,88 @@ def run_nmma_model(data_dict):
     sampler = analysis_parameters.get("sampler")
 
     # read data and create a cvs file expecte to nmma
-    # data = convert_csv(data_dict)
-    data = Table.read(data_dict["inputs"]["photometry"], format="ascii.csv")
-    # Create a temporary file to save data in nmma csv format
 
-    plotdir = os.path.abspath("..") + "/" + os.path.join("nmma_output")
-    if not os.path.isdir(plotdir):
-        os.makedirs(plotdir)
+    data = convert_csv(data_dict)
+    # data = Table.read(data_dict["inputs"]["photometry"], format="ascii.csv")
 
-    # plotdir = tempfile.mkdtemp()
-    with tempfile.NamedTemporaryFile(
-        delete=False, suffix=".csv", dir=plotdir, mode="w"
-    ) as outfile:
+    rez = {"status": "failure", "message": "", "analysis": {}}
+    try:
+        # Create a temporary file to save data in nmma csv format
+        plotdir = tempfile.mkdtemp()
 
-        Data = Table()
-        Data["jd"] = data["jd"]
-        Data["mag"] = data["mag"]
-        Data["mag_unc"] = data["mag_unc"]
-        Data["filter"] = data["filter"]
-        Data["limmag"] = data["limmag"]
-        Data["programid"] = data["programid"]
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=".csv", dir=plotdir, mode="w"
+        ) as outfile:
 
-        df = Data.to_pandas()
-        df.to_csv(outfile)
-        outfile.flush()
+            Data = Table()
+            Data["jd"] = data["jd"]
+            Data["mag"] = data["mag"]
+            Data["mag_unc"] = data["mag_unc"]
+            Data["filter"] = data["filter"]
+            Data["limmag"] = data["limmag"]
+            Data["programid"] = data["programid"]
 
-        # infile take the  photometry csv file readable by nmma format
-        # Parses a file format with a single candidate
-        infile = outfile.name
-        nmma_data = parse_csv(infile)
+            df = Data.to_pandas()
+            df.to_csv(outfile)
+            outfile.flush()
 
-        fit_result = fit_lc(
-            model_name,
-            cand_name,
-            nmma_data,
-            prior_directory,
-            svdmodel_directory,
-            interpolation_type,
-            sampler,
-        )
-        shutil.rmtree(plotdir)
+            # infile take the  photometry csv file readable by nmma format
+            # Parses a file format with a single candidate
+            nmma_data = parse_csv(outfile.name)
+            # local_temp_files.append(outfile.name)
+            # Fitting model model result
 
-    return fit_result
+            fit_result, plot_data = fit_lc(
+                model_name,
+                cand_name,
+                nmma_data,
+                prior_directory,
+                svdmodel_directory,
+                interpolation_type,
+                sampler,
+            )
 
+            if fit_result.success:
+                fit_result.update({"model": model_name, "object_id": cand_name})
+
+                with tempfile.NamedTemporaryFile(
+                    suffix=".joblib", prefix="results_", dir=plotdir, delete=False
+                ) as outfile:
+                    outfile.flush()
+
+                    joblib.dump(fit_result, outfile.name, compress=3)
+                    result_data = base64.b64encode(open(outfile.name, "rb").read())
+
+                    analysis_results = {
+                        "plots": [{"format": "png", "data": plot_data}],
+                        "results": {"format": "joblib", "data": result_data},
+                    }
+                    rez.update(
+                        {
+                            "analysis": analysis_results,
+                            "status": "success",
+                            "message": f" Inference results of inference with {fit_result.log_bayes_factor}",
+                        }
+                    )
+            else:
+                log("Fit failed.")
+                rez.update({"status": "failure", "message": f"{fit_result.message}"})
+
+    except Exception as e:
+        log(f"Exception while running the model: {e}")
+        log(f"{traceback.format_exc()}")
+        log(f"Data: {data}")
+        rez.update({"status": "failure", "message": f"problem running the model {e}"})
+
+    shutil.rmtree(plotdir)
+
+    return rez
+
+
+result = run_nmma_model(data_dict)
+
+
+"""
 
 (
     posterior_samples,
@@ -222,5 +268,5 @@ def run_nmma_model(data_dict):
     log_bayes_factor,
     data_out,
     plot_data,
-    local_temp_files,
 ) = run_nmma_model(data_dict)
+"""

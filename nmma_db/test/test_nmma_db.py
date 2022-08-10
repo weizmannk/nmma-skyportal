@@ -46,3 +46,27 @@ data_dict = {
     interpolation_type,
     sampler,
 )
+
+
+fit_result = fit_lc(
+    model_name,
+    cand_name,
+    nmma_data,
+    prior_directory,
+    svdmodel_directory,
+    interpolation_type,
+    sampler,
+)
+
+
+def myFunc(x, y):
+    print("starting for " + str([x, y]))
+    time.sleep(5)
+    return x**2 + 2 * y
+
+
+argsList = [(1, 2), (3, 4), (5, 6), (7, 8)]
+result = joblib.Parallel(n_jobs=2, prefer="processes")(
+    joblib.delayed(myFunc)(*args) for args in argsList
+)
+print(result)
