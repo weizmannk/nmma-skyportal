@@ -124,7 +124,7 @@ def fit_lc(
     # we will need to write to temp files
     # locally and then write their contents
     # to the results dictionary for uploading
-    local_temp_files = []
+
 
     plotdir = tempfile.mkdtemp()
     # output the data
@@ -240,6 +240,9 @@ def fit_lc(
                 #    trigger_time += bestfit_params['KNtimeshift']
 
                 plotName = os.path.join(plotdir, f"{model_name}_lightcurves.png")
+                print('+++++++++++++++++++++++++++++++++++++++++++')
+                print(plotName)
+                print('...................++++++++++++++++++++++++++++++*')
                 plot_bestfit_lightcurve(
                     outfile.name,
                     bestfit_lightcurve_magKN_KNGRB,
@@ -273,6 +276,6 @@ def fit_lc(
                 message=f"Unfortunatly something goes wrong during {model_name} mdel to fit {cand_name}.",
             )
 
-    shutil.rmtree(plotdir)
+    #shutil.rmtree(plotdir)
 
     return (inference_data,  plot_data, fit_result)
