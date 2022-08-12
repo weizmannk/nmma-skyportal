@@ -4,8 +4,13 @@ import os
 import json
 import base64
 
+import joblib
+import arviz as az
+import requests
+
 import numpy as np
 from astropy.time import Time
+from astropy.table import Table
 from scipy.optimize import OptimizeResult
 import tempfile
 import shutil
@@ -42,7 +47,7 @@ def fit_lc(
 
     # Other important settings
     # cpus = 2
-    nlive = 256
+    nlive = 36
     error_budget = 1.0
 
     ##########################
@@ -187,6 +192,7 @@ def fit_lc(
             plot_sample_times = np.concatenate(
                 (plot_sample_times_KN, plot_sample_times_GRB)
             )
+            
             posterior_file = os.path.join(
                 plotdir, cand_name + "_" + model_name + "_posterior_samples.dat"
             )
@@ -194,61 +200,79 @@ def fit_lc(
                 plotdir, cand_name + "_" + model_name + "_result.json"
             )
 
-            with open(json_file, "r") as f:
-                lcDict = json.load(f)
+            if os.path.isfile(posterior_file):
+                tab = Table.read(posterior_file, format='csv', delimiter=' ')
+                print(tab)
+                inference = az.convert_to_inference_data(
+                    tab.to_pandas().to_dict(orient='list')
+                )
+                f = tempfile.NamedTemporaryFile(
+                suffix=".nc", prefix="inferencedata_", dir=plotdir, delete=False
+                )
+                f.close()
+                inference.to_netcdf(f.name)
+                inference_data = base64.b64encode(open(f.name, 'rb').read())
+               
+                with open(json_file, "r") as f:
+                    result  = json.load(f)
 
-            log_bayes_factor = lcDict["log_bayes_factor"]
-            # log_evidence = lcDict["log_evidence"]
-            # log_evidence_err = lcDict["log_evidence_err"]
+                #log_bayes_factor = lcDict["log_bayes_factor"]
+                # log_evidence = lcDict["log_evidence"]
+                # log_evidence_err = lcDict["log_evidence_err"]
+                               
+                print("*********************************")
+                if os.path.isfile(json_file):
+                    print("*********************************")
 
-            (
-                posterior_samples,
-                bestfit_params,
-                bestfit_lightcurve_magKN_KNGRB,
-            ) = get_bestfit_lightcurve(
-                model_name,
-                posterior_file,
-                svdmodel_directory,
-                plot_sample_times,
-                interpolation_type=interpolation_type,
-            )
+                (
+                    posterior_samples,
+                    bestfit_params,
+                    bestfit_lightcurve_magKN_KNGRB,
+                ) = get_bestfit_lightcurve(
+                    model_name,
+                    posterior_file,
+                    svdmodel_directory,
+                    plot_sample_times,
+                    interpolation_type=interpolation_type,
+                )
 
-            # if fit_trigger_time:
-            #    trigger_time += bestfit_params['KNtimeshift']
+                # if fit_trigger_time:
+                #    trigger_time += bestfit_params['KNtimeshift']
 
-            plotName = os.path.join(plotdir, f"{model_name}_lightcurves.png")
-            plot_bestfit_lightcurve(
-                outfile.name,
-                bestfit_lightcurve_magKN_KNGRB,
-                error_budget,
-                trigger_time,
-                plotName,
-            )
-
+                plotName = os.path.join(plotdir, f"{model_name}_lightcurves.png")
+                plot_bestfit_lightcurve(
+                    outfile.name,
+                    bestfit_lightcurve_magKN_KNGRB,
+                    error_budget,
+                    trigger_time,
+                    plotName,
+                
+                )
+                plot_data = base64.b64encode(open(plotName, "rb").read())
+            
+            else:
+                print("There is no directory to posterior file.")
+                
     except Exception as e:
-
         print(e)
 
-    else:
-        plot_data = base64.b64encode(open(plotName, "rb").read())
-        path = Path(plotName)
-
-        if path.is_file():
+    else: 
+        if os.path.isfile(plotName):
             fit_result = OptimizeResult(
                 success=True,
-                message=f"{model_name} model has been used successfully to fit {cand_name}.",
-                posterior_samples=posterior_samples,
-                bestfit_params=bestfit_params,
-                bestfit_lightcurve_magKN_KNGRB=bestfit_lightcurve_magKN_KNGRB,
-                log_bayes_factor=log_bayes_factor,
-                data_out=data_out,
+                message = f"{model_name} model has been used successfully to fit {cand_name}.",
+                posterior_samples = posterior_samples,
+                bestfit_params = bestfit_params,
+                bestfit_lightcurve_magKN_KNGRB = bestfit_lightcurve_magKN_KNGRB,
+                json_result = result,
+                data_out = data_out,
             )
         else:
-            fit_result = OptimizeResulte(
+            fit_result = OptimizeResult(
                 success=False,
                 message=f"Unfortunatly something goes wrong during {model_name} mdel to fit {cand_name}.",
             )
 
     shutil.rmtree(plotdir)
 
-    return (fit_result, plot_data)
+    return (inference_data,  plot_data, fit_result)
