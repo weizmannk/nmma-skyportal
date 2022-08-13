@@ -1,8 +1,7 @@
 [submodule "nmma"]
 	path = nmma
 	url = https://github.com/nuclear-multimessenger-astronomy/nmma.git
-	branch = master
+
 [submodule "skyportal"]
 	path = skyportal
 	url = https://github.com/skyportal/skyportal.git
-	branch = master
