@@ -13,39 +13,38 @@ from fink_client.consumer import AlertConsumer
 from astropy.time import Time
 from fink_filters.classification import extract_fink_classification_from_pdf
 
-from .utils import skyportal_api
-from .utils.switchers import fid_to_filter_ztf
-from .utils.log import make_log
-from .utils import config_file as file
+from .fink import skyportal_api
+from .fink.switchers import fid_to_filter_ztf
+from .fimk.log import make_log
+from .fink import config_file as file
 
 import pandas as pd
 
 
 # config.yaml file dir
-config_file_path = os.path.join(os.path.dirname(__file__)) + "/../config.yaml"
+config_file_path = f"{os.path.dirname(os.path.realpath(__file__))}/fink/config.yaml"
 
 # skyportal admin token dir
-skyportal_token_path = (
-    os.path.abspath(os.path.join(os.path.dirname(__file__)))
-    + "/../../skyportal/.tokens.yaml"
-)
+skyportal_token_path = f"{os.path.dirname(os.path.realpath(__file__))}/skyportal/.tokens.yaml"
+# Read skyportal admin token from skyportal directory
+# admin_token = ".tokens.yaml"
+skyportal_token = file.get_skyportal_admin_token(skyportal_token_path)
+
+
 # Copy the neww token in the config file
-file.update_config_file(config_file_path, skyportal_token_path)
+#file.update_config_file(config_file_path, skyportal_token_path)
 
 # open yaml config file
 conf = file.load_config(config_file_path)
 
-taxonomy_dict = file.load_config(
-    os.path.abspath(os.path.join(os.path.dirname(__file__))) + "/data/taxonomy.yaml"
-)
+#Taxonomy 
+taxo_dir = f"{os.path.dirname(os.path.realpath(__file__))}/fink/taxonomy.yaml"
+taxonomy_dict = file.load_config(taxo_dir)
 
-schema = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "/../tests/schemas/schema_test.avsc")
-)
+# To generate  Fake allerte for when test =True
+schema = f"{os.path.dirname(os.path.realpath(__file__))}/fink/schemas/schema_test.avsc"
 
-# Read skyportal admin token from skyportal directory
-# admin_token = ".tokens.yaml"
-skyportal_token = file.get_skyportal_admin_token(skyportal_token_path)
+
 
 
 def init_skyportal(

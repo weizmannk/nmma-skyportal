@@ -4,31 +4,36 @@ import os
 import json
 import base64
 
-import joblib
 import arviz as az
-import requests
-
 import numpy as np
 from astropy.time import Time
 from astropy.table import Table
 from scipy.optimize import OptimizeResult
+
 import tempfile
 import shutil
-from pathlib import Path
 
-from utils import get_bestfit_lightcurve, plot_bestfit_lightcurve
-
+import bilby
+from utils.util import get_bestfit_lightcurve, plot_bestfit_lightcurve
 from nmma.em.utils import loadEvent
+
+from utils.log import make_log
+log = make_log("nmma_analysis_service")
+
+
+# Fixed Parameters  
+sampler = "pymultinest"
+interpolation_type ="sklearn_gp"
+prior_directory    = f"{os.path.dirname(os.path.realpath(__file__))}/nmma/priors"
+svdmodel_directory = f"{os.path.dirname(os.path.realpath(__file__))}/nmma/svdmodels"
 
 
 def fit_lc(
     model_name,
     cand_name,
     nmma_data,
-    prior_directory,
-    svdmodel_directory,
-    interpolation_type,
-    sampler,
+    fix_z = False,
+    z= None,
 ):
 
     # Begin with stuff that may eventually replaced with something else,
@@ -53,7 +58,16 @@ def fit_lc(
     ##########################
     # Setup parameters and fit
     ##########################
-
+            
+        
+    # we will need to write to temp files
+    # locally and then write their contents
+    # to the results dictionary for uploading
+    
+    plotdir = tempfile.mkdtemp()
+    # output the data
+    # in the format desired by NMMA
+    #try:
     # Set the trigger time
     if fit_trigger_time:
         # Set to earliest detection in preparation for fit
@@ -90,46 +104,31 @@ def fit_lc(
     # jet_type = 0
     # sampler = "pymultinest"
     # seed = 42
+    
+    try:   
+        # Set the prior file. Depends on model and if trigger time is a parameter.
+        if prior is None:
+            prior = f"{prior_directory}/{model_name}.prior"
+        
+        # if not prior file exists, create it by using bilby
+        if not os.path.isfile(prior):
+            log(f"Prior file for model {model_name} does not exist, bilby are creating it")
+            priors = bilby.gw.prior.PriorDict(prior)
+        
+            # if readshift is fixed we need z(readshift) value(s) 
+            if fix_z:
+                if z is not None:
+                    from astropy.cosmology import Planck18 as cosmo
 
-    # Set the prior file. Depends on model and if trigger time is a parameter.
-    if prior is None:
-        if model_name == "nugent-hyper":
-            # supernova
-            if fit_trigger_time:
-                prior = f"{prior_directory}/ZTF_sn_t0.prior"
-            else:
-                prior = f"{prior_directory}/ZTF_sn.prior"
-        elif model_name == "TrPi2018":
-            # GRB
-            if fit_trigger_time:
-                prior = f"{prior_directory}/ZTF_grb_t0.prior"
-            else:
-                prior = f"{prior_directory}/ZTF_grb.prior"
-        elif model_name == "Piro2021":
-            # Shock cooling
-            if fit_trigger_time:
-                prior = f"{prior_directory}/ZTF_sc_t0.prior"
-            else:
-                prior = f"{prior_directory}/ZTF_sc.prior"
-        elif model_name == "Bu2019lm":
-            # KN
-            if fit_trigger_time:
-                prior = f"{prior_directory}/ZTF_kn_t0.prior"
-            else:
-                prior = f"{prior_directory}/ZTF_kn.prior"
-        else:
-            print("fit.py does not know of the prior file for model ", model_name)
-            exit(1)
-
-    # we will need to write to temp files
-    # locally and then write their contents
-    # to the results dictionary for uploading
-
-
-    plotdir = tempfile.mkdtemp()
-    # output the data
-    # in the format desired by NMMA
-    try:
+                    priors['luminosity_distance'] = cosmo.luminosity_distance(z).value
+                else:
+                    raise ValueError("No redshift provided but `fix_z` requested.")
+                
+            priors.to_file(plotdir, model_name)
+            prior = os.path.join(plotdir, f'{model_name}.prior')
+    
+        # output the data
+        # in the format desired by NMMA
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=".dat", prefix=f"{model_name}_", dir=plotdir, mode="w"
         ) as outfile:
@@ -220,10 +219,6 @@ def fit_lc(
                 # log_evidence = lcDict["log_evidence"]
                 # log_evidence_err = lcDict["log_evidence_err"]
                                
-                print("*********************************")
-                if os.path.isfile(json_file):
-                    print("*********************************")
-
                 (
                     posterior_samples,
                     bestfit_params,
@@ -240,16 +235,13 @@ def fit_lc(
                 #    trigger_time += bestfit_params['KNtimeshift']
 
                 plotName = os.path.join(plotdir, f"{model_name}_lightcurves.png")
-                print('+++++++++++++++++++++++++++++++++++++++++++')
-                print(plotName)
-                print('...................++++++++++++++++++++++++++++++*')
+                
                 plot_bestfit_lightcurve(
                     outfile.name,
                     bestfit_lightcurve_magKN_KNGRB,
                     error_budget,
                     trigger_time,
-                    plotName,
-                
+                    plotName, 
                 )
                 plot_data = base64.b64encode(open(plotName, "rb").read())
             
@@ -259,6 +251,7 @@ def fit_lc(
     except Exception as e:
         print(e)
 
+    #Use OptimizeResult from scipy to write and generate our results.   
     else: 
         if os.path.isfile(plotName):
             fit_result = OptimizeResult(
@@ -276,6 +269,6 @@ def fit_lc(
                 message=f"Unfortunatly something goes wrong during {model_name} mdel to fit {cand_name}.",
             )
 
-    #shutil.rmtree(plotdir)
+    shutil.rmtree(plotdir)
 
     return (inference_data,  plot_data, fit_result)
