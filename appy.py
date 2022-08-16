@@ -25,9 +25,10 @@ from fit import fit_lc
 from utils.nmma_process import skyportal_input_to_nmma
 
 from utils.log import make_log
-#from baselayer.app.env import load_env
 
-#_, cfg = load_env()
+# from baselayer.app.env import load_env
+
+# _, cfg = load_env()
 
 log = make_log("nmma_analysis_service")
 
@@ -38,7 +39,7 @@ rng = np.random.default_rng()
 
 default_analysis_parameters = {"source": "Bu2019lm", "fix_z": False}
 
-infile =f"{os.path.dirname(os.path.realpath('__file__'))}/data/kilonova_BNS_lc.csv"
+infile = f"{os.path.dirname(os.path.realpath('__file__'))}/data/kilonova_BNS_lc.csv"
 
 cand_name = "kilonova_BNS_lc"
 
@@ -162,23 +163,23 @@ def run_nmma_model(data_dict):
     model_name = analysis_parameters.get("source")
     fix_z = analysis_parameters.get("fix_z") in [True, "True", "t", "true"]
     cand_name = analysis_parameters.get("object_id")
-    #prior_directory = analysis_parameters.get("prior_directory")
-    #svdmodel_directory = analysis_parameters.get("svdmodel_directory")
-    #interpolation_type = analysis_parameters.get("interpolation_type")
-    #sampler = analysis_parameters.get("sampler")
+    # prior_directory = analysis_parameters.get("prior_directory")
+    # svdmodel_directory = analysis_parameters.get("svdmodel_directory")
+    # interpolation_type = analysis_parameters.get("interpolation_type")
+    # sampler = analysis_parameters.get("sampler")
 
-    # read data and create a cvs file expecte to nmma 
+    # read data and create a cvs file expecte to nmma
     rez = {"status": "failure", "message": "", "analysis": {}}
-    
+
     data = convert_csv(data_dict)
-    
 
     try:
-        #data = Table.read(data_dict["inputs"]["photometry"], format='ascii.csv')
-        if fix_z: 
-            redshift = Table.read(data_dict["inputs"]["redshift"], format='ascii.csv')
-            z = redshift['redshift'][0]
-        else: z = None
+        # data = Table.read(data_dict["inputs"]["photometry"], format='ascii.csv')
+        if fix_z:
+            redshift = Table.read(data_dict["inputs"]["redshift"], format="ascii.csv")
+            z = redshift["redshift"][0]
+        else:
+            z = None
 
     except Exception as e:
         rez.update(
@@ -187,10 +188,10 @@ def run_nmma_model(data_dict):
                 "message": f"input data is not in the expected format {e}",
             }
         )
-   
+
     local_temp_files = []
     try:
-        # Create a temporary file to save data in nmma csv format 
+        # Create a temporary file to save data in nmma csv format
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=".csv", mode="w"
         ) as outfile:
@@ -208,17 +209,14 @@ def run_nmma_model(data_dict):
             outfile.flush()
 
             local_temp_files.append(outfile.name)
-            
+
             # infile take the  photometry csv file readable by nmma format
             # Parses a file format with a single candidate
             nmma_data = parse_csv(outfile.name)
             # local_temp_files.append(outfile.name)
             # Fitting model model result
 
-            (   inference_data,
-                plot_data, 
-                fit_result
-            ) = fit_lc(
+            (inference_data, plot_data, fit_result) = fit_lc(
                 model_name,
                 cand_name,
                 nmma_data,
@@ -233,12 +231,12 @@ def run_nmma_model(data_dict):
                     suffix=".joblib", prefix="results_", delete=False
                 )
                 f.close()
-                #outfile.flush()
+                # outfile.flush()
                 local_temp_files.append(f.name)
-                
+
                 joblib.dump(fit_result, outfile.name, compress=3)
                 result_data = base64.b64encode(open(outfile.name, "rb").read())
-                
+
                 analysis_results = {
                     "inference_data": {"format": "netcdf4", "data": inference_data},
                     "plots": [{"format": "png", "data": plot_data}],
@@ -246,11 +244,11 @@ def run_nmma_model(data_dict):
                 }
                 rez.update(
                     {
-                    "analysis": analysis_results,
-                    "status": "success",
-                    "message": f" Inference results of inference with "
-                    + r"$\log(bayes-factor)$"
-                    + f" = { fit_result.json_result['log_bayes_factor']}",
+                        "analysis": analysis_results,
+                        "status": "success",
+                        "message": f" Inference results of inference with "
+                        + r"$\log(bayes-factor)$"
+                        + f" = { fit_result.json_result['log_bayes_factor']}",
                     }
                 )
                 rez.update({"status": "failure", "message": "model failed to converge"})
@@ -268,8 +266,8 @@ def run_nmma_model(data_dict):
                 pass
     return rez
 
-#result = run_nmma_model(data_dict)
 
+# result = run_nmma_model(data_dict)
 
 
 class MainHandler(tornado.web.RequestHandler):
@@ -285,9 +283,9 @@ class MainHandler(tornado.web.RequestHandler):
 
     def post(self):
 
-        #Analysis endpoint which sends the `data_dict` off for
-        #processing, returning immediately. The idea here is that
-        #the analysis model may take awhile to run so we
+        # Analysis endpoint which sends the `data_dict` off for
+        # processing, returning immediately. The idea here is that
+        # the analysis model may take awhile to run so we
 
         try:
             data_dict = tornado.escape.json_decode(self.request.body)
@@ -308,10 +306,10 @@ class MainHandler(tornado.web.RequestHandler):
             data_dict=data_dict,
         ):
 
-            #Callback function for when the nmma analysis service #is done.
-            #Sends back results/errors via the callback_url.
-            #This is run synchronously after the future completes
-            #so there is no need to await for `future`.
+            # Callback function for when the nmma analysis service #is done.
+            # Sends back results/errors via the callback_url.
+            # This is run synchronously after the future completes
+            # so there is no need to await for `future`.
 
             try:
                 result = future.result()
@@ -336,7 +334,6 @@ class MainHandler(tornado.web.RequestHandler):
         )
 
 
-
 def make_app():
     return tornado.web.Application(
         [
@@ -344,11 +341,12 @@ def make_app():
         ]
     )
 
+
 # Theo process
 if __name__ == "__main__":
     nmma_analysis = make_app()
-    if 'PORT' in os.environ:
-        port = int(os.environ['PORT'])
+    if "PORT" in os.environ:
+        port = int(os.environ["PORT"])
     else:
         port = 6901
     nmma_analysis.listen(port)
@@ -364,5 +362,5 @@ if __name__ == "__main__":
     port = cfg["analysis_services.nmma_analysis_service.port"]
     nmma_analysis.listen(port)
     log(f"Listening on port {port}")
-    tornado.ioloop.IOLoop.current().start() 
+    tornado.ioloop.IOLoop.current().start()
 """

@@ -25,26 +25,26 @@ import pandas as pd
 config_file_path = f"{os.path.dirname(os.path.realpath(__file__))}/fink/config.yaml"
 
 # skyportal admin token dir
-skyportal_token_path = f"{os.path.dirname(os.path.realpath(__file__))}/skyportal/.tokens.yaml"
+skyportal_token_path = (
+    f"{os.path.dirname(os.path.realpath(__file__))}/skyportal/.tokens.yaml"
+)
 # Read skyportal admin token from skyportal directory
 # admin_token = ".tokens.yaml"
 skyportal_token = file.get_skyportal_admin_token(skyportal_token_path)
 
 
 # Copy the neww token in the config file
-#file.update_config_file(config_file_path, skyportal_token_path)
+# file.update_config_file(config_file_path, skyportal_token_path)
 
 # open yaml config file
 conf = file.load_config(config_file_path)
 
-#Taxonomy 
+# Taxonomy
 taxo_dir = f"{os.path.dirname(os.path.realpath(__file__))}/fink/taxonomy.yaml"
 taxonomy_dict = file.load_config(taxo_dir)
 
 # To generate  Fake allerte for when test =True
 schema = f"{os.path.dirname(os.path.realpath(__file__))}/fink/schemas/schema_test.avsc"
-
-
 
 
 def init_skyportal(
