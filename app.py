@@ -267,7 +267,7 @@ def run_nmma_model(data_dict):
     return rez
 
 
-# result = run_nmma_model(data_dict)
+result = run_nmma_model(data_dict)
 
 
 class MainHandler(tornado.web.RequestHandler):
