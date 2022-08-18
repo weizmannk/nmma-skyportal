@@ -24,7 +24,7 @@ log = make_log("nmma_analysis_service")
 
 # Fixed Parameters
 sampler = "pymultinest"
-interpolation_type = "sklearn_gp"
+interpolation_type = "tensorflow"
 prior_directory = f"{os.path.dirname(os.path.realpath(__file__))}/../../../nmma/priors"
 svdmodel_directory = (
     f"{os.path.dirname(os.path.realpath(__file__))}/../../../nmma/svdmodels"
@@ -55,7 +55,7 @@ def fit_lc(
 
     # Other important settings
     # cpus = 2
-    nlive = 256
+    nlive = 32
     error_budget = 1.0
 
     ##########################

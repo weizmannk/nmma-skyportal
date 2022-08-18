@@ -269,7 +269,7 @@ def run_nmma_model(data_dict):
 
 result = run_nmma_model(data_dict)
 
-
+"""
 class MainHandler(tornado.web.RequestHandler):
     def set_default_headers(self):
         self.set_header("Content-Type", "application/json")
@@ -353,6 +353,7 @@ if __name__ == "__main__":
     log(f"NMMA Service Listening on port {port}")
     tornado.ioloop.IOLoop.current().start()
 
+"""
 """
 if __name__ == "__main__":
     nmma_analysis = make_app()

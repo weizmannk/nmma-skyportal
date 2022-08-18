@@ -13,16 +13,18 @@ from fink_client.consumer import AlertConsumer
 from astropy.time import Time
 from fink_filters.classification import extract_fink_classification_from_pdf
 
-from .fink import skyportal_api
-from .fink.switchers import fid_to_filter_ztf
-from .fimk.log import make_log
-from .fink import config_file as file
+from utils import skyportal_api
+from utils.switchers import fid_to_filter_ztf
+from utils.log import make_log
+from utils import config_file as file
 
 import pandas as pd
 
 
 # config.yaml file dir
-config_file_path = f"{os.path.dirname(os.path.realpath(__file__))}/fink/config.yaml"
+config_file_path = (
+    f"{os.path.dirname(os.path.realpath(__file__))}/configuration/config.yaml"
+)
 
 # skyportal admin token dir
 skyportal_token_path = (

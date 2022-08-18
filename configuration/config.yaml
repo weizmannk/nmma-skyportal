@@ -2,11 +2,11 @@ fink_group_id: weizmann_k
 fink_password: null
 fink_servers: 134.158.74.95:24499
 fink_topics:
-- fink_rate_based_kn_candidates_ztf
-- fink_kn_candidates_ztf
-- fink_early_kn_candidates_ztf
-- fink_sn_candidates_ztf
-- fink_early_sn_candidates_ztf
+  - fink_rate_based_kn_candidates_ztf
+  - fink_kn_candidates_ztf
+  - fink_early_kn_candidates_ztf
+  - fink_sn_candidates_ztf
+  - fink_early_sn_candidates_ztf
 fink_username: weizmann
 skyportal_group: NMMA-SkyPortal
 skyportal_token: 4723b4c2-8a24-40d0-9167-118ce8909a90
