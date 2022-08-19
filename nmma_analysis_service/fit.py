@@ -261,11 +261,9 @@ def fit_lc(
             fit_result = OptimizeResult(
                 success=True,
                 message=f"{model_name} model has been used successfully to fit {cand_name}.",
-                posterior_samples=posterior_samples,
                 bestfit_params=bestfit_params,
                 bestfit_lightcurve_magKN_KNGRB=bestfit_lightcurve_magKN_KNGRB,
                 json_result=result,
-                data_out=data_out,
             )
         else:
             fit_result = OptimizeResult(

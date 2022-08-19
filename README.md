@@ -30,12 +30,11 @@
 1* Install dependencies
 
     sudo apt install nginx supervisor postgresql \
-      libpq-dev npm python3-pip \
+      libpq-dev python3-pip \
       libcurl4-gnutls-dev libgnutls28-dev
 
 2* install npm recent version
-
-    https://computingforgeeks.com/how-to-install-node-js-on-ubuntu-debian/
+ https://computingforgeeks.com/how-to-install-node-js-on-ubuntu-debian/
 
     cd ~
     curl -sL https://deb.nodesource.com/setup_16.x | sudo bash -
@@ -91,3 +90,93 @@ where <postgres-version> is the number of postgres version
     local   replication     all                                     trust
     host    replication     all             127.0.0.1/32            trust
     host    replication     all             ::1/128                 trust
+
+
+### Restart PostgreSQL:
+
+    sudo service postgresql restart
+
+### To run the test suite, you’ll need Geckodriver:
+
+   * Download the latest version from https://github.com/* mozilla/geckodriver/releases/
+
+    *Extract the binary to somewhere on your path
+
+    *Ensure it runs with geckodriver --version
+
+In later versions of Ubuntu (16.04+), you can install Geckodriver through apt:
+
+    sudo apt install firefox-geckodriver
+
+
+
+### To build the docs, you’ll need graphviz:
+
+    sudo apt install graphviz-dev graphviz
+## nmma-skyportal issues
+
+On the cluster latex didn't work propperly.
+When you get this type of issues:
+
+    RuntimeError: Failed to process string with tex because latex could not be found
+
+So we need to install it by using the following commands
+
+    sudo apt install texlive texlive-latex-extra texlive-fonts-recommended dvipng
+
+         or
+
+    pip install latex
+
+
+For this error
+`frozen importlib._bootstrap>:219: RuntimeWarning: scipy._lib.messagestream.MessageStream size changed, may indicate binary incompatibility. Expected 56 from C header, got 64 from PyObject `
+
+Just update requests package
+
+    pip install --upgrade requests
+
+
+## Other commands for develloping
+
+Install pre-commit https://pre-commit.com/
+
+    pip install pre-commit
+
+            or
+
+    conda install -c conda-forge pre-commit
+
+
+    pre-commit
+
+### check the pre-commit version
+
+    pre-commit --version
+
+### Create pre-commit file
+
+    touch .pre-commit-config.yaml
+
+
+### Install your pe-commit
+
+    pre-commit install
+
+## Run it to check
+
+    pre-commit run --all-files
+
+
+### numpy issues
+
+ligo-skymap 1.0.2 requires numpy!=1.22.0,>=1.19.3
+numba 0.56.0 requires numpy<1.23,>=1.18
+
+ so we could install :
+
+    pip install numpy 1.22.3
+
+In case of numpy issues, please  remove numpy by following this
+
+https://stackoverflow.com/questions/68886239/cannot-uninstall-numpy-1-21-2-record-file-not-found

@@ -26,9 +26,9 @@ from utils.nmma_process import skyportal_input_to_nmma
 
 from utils.log import make_log
 
-# from baselayer.app.env import load_env
+from baselayer.app.env import load_env
 
-# _, cfg = load_env()
+_, cfg = load_env()
 
 log = make_log("nmma_analysis_service")
 
@@ -216,7 +216,7 @@ def run_nmma_model(data_dict):
             # local_temp_files.append(outfile.name)
             # Fitting model model result
 
-            (inference_data, plot_data, fit_result) = fit_lc(
+            (inference_data, plot_data, fit_result,) = fit_lc(
                 model_name,
                 cand_name,
                 nmma_data,
@@ -227,15 +227,15 @@ def run_nmma_model(data_dict):
             if fit_result.success:
                 fit_result.update({"source": model_name, "object_id": cand_name})
 
+                fit_result.update({"source": model_name, "fix_z": fix_z})
+
                 f = tempfile.NamedTemporaryFile(
                     suffix=".joblib", prefix="results_", delete=False
                 )
                 f.close()
-                # outfile.flush()
-                local_temp_files.append(f.name)
-
                 joblib.dump(fit_result, outfile.name, compress=3)
                 result_data = base64.b64encode(open(outfile.name, "rb").read())
+                local_temp_files.append(f.name)
 
                 analysis_results = {
                     "inference_data": {"format": "netcdf4", "data": inference_data},
@@ -251,6 +251,8 @@ def run_nmma_model(data_dict):
                         + f" = { fit_result.json_result['log_bayes_factor']}",
                     }
                 )
+            else:
+                log("Fit failed.")
                 rez.update({"status": "failure", "message": "model failed to converge"})
 
     except Exception as e:
@@ -267,9 +269,9 @@ def run_nmma_model(data_dict):
     return rez
 
 
-result = run_nmma_model(data_dict)
+results = run_nmma_model(data_dict)
 
-"""
+
 class MainHandler(tornado.web.RequestHandler):
     def set_default_headers(self):
         self.set_header("Content-Type", "application/json")
@@ -345,15 +347,17 @@ def make_app():
 # Theo process
 if __name__ == "__main__":
     nmma_analysis = make_app()
-    if "PORT" in os.environ:
-        port = int(os.environ["PORT"])
-    else:
-        port = 6901
+    port = cfg["analysis_services.nmma_analysis_service.port"]
+
+    # if "PORT" in os.environ:
+    #    port = int(os.environ["PORT"])
+    # else:
+    #    port = 6901
     nmma_analysis.listen(port)
     log(f"NMMA Service Listening on port {port}")
     tornado.ioloop.IOLoop.current().start()
 
-"""
+
 """
 if __name__ == "__main__":
     nmma_analysis = make_app()
