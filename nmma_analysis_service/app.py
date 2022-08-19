@@ -26,9 +26,9 @@ from utils.nmma_process import skyportal_input_to_nmma
 
 from utils.log import make_log
 
-from baselayer.app.env import load_env
+# from baselayer.app.env import load_env
 
-_, cfg = load_env()
+# _, cfg = load_env()
 
 log = make_log("nmma_analysis_service")
 
@@ -344,15 +344,12 @@ def make_app():
     )
 
 
-# Theo process
 if __name__ == "__main__":
     nmma_analysis = make_app()
-    port = cfg["analysis_services.nmma_analysis_service.port"]
-
-    # if "PORT" in os.environ:
-    #    port = int(os.environ["PORT"])
-    # else:
-    #    port = 6901
+    if "PORT" in os.environ:
+        port = int(os.environ["PORT"])
+    else:
+        port = 6901
     nmma_analysis.listen(port)
     log(f"NMMA Service Listening on port {port}")
     tornado.ioloop.IOLoop.current().start()
