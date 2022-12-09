@@ -2,7 +2,7 @@ aplpy==2.1.0
 astropy==5.0.4
 astropy-healpix==0.6
 attrs==21.4.0
-certifi==2021.10.8
+certifi==2022.12.7
 cfgv==3.3.1
 charset-normalizer==2.0.12
 codecov==2.1.12
