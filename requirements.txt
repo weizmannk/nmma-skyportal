@@ -5,8 +5,8 @@ attrs==21.4.0
 certifi==2021.10.8
 cfgv==3.3.1
 charset-normalizer==2.0.12
-codecov==2.1.12
-confluent-kafka==1.8.2
+codecov==2.1.13
+confluent-kafka==2.2
 coverage==6.3.2
 coveralls==3.3.1
 cycler==0.11.0

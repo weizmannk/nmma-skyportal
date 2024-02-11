@@ -1,264 +1,210 @@
+## python -m nmma.utils.models --model="Bu2019lm" --filters=ztfr,ztfg,ztfi --svd-path='./svdmodels' --source='zenodo'
 import os
 import functools
+import tempfile
 import base64
 import traceback
 import json
 
-import joblib
+import requests
 import numpy as np
 import matplotlib
+
+matplotlib.use("Agg")  # Set backend for matplotlib
 import arviz as az
-import requests
+import joblib
+from astropy.table import Table
 
 from tornado.ioloop import IOLoop
 import tornado.web
 import tornado.escape
 
-import tempfile
-import shutil
-from astropy.time import Time
-from astropy.table import Table
-from astropy.io import ascii
-
-from utils.util import parse_csv
 from fit import fit_lc
-from utils.nmma_process import skyportal_input_to_nmma
-
-from utils.log import make_log
-
-# from baselayer.app.env import load_env
-
-# _, cfg = load_env()
-
-log = make_log("nmma_analysis_service")
+from nmma_process import skyportal_input_to_nmma, parse_csv
+from log import make_log
 
 # we need to set the backend here to insure we
 # can render the plot headlessly
 matplotlib.use("Agg")
 rng = np.random.default_rng()
 
-default_analysis_parameters = {"source": "Bu2019lm", "fix_z": False}
+ALLOWED_MODELS = [
+    "Bu2019lm",
+    "Me2017",
+    "Piro2021",
+    "nugent-hyper",
+    "TrPi2018",
+    "Bu2022Ye",
+]
 
-infile = f"{os.path.dirname(os.path.realpath(__file__))}/data/kilonova_BNS_lc.csv"
 
-cand_name = "kilonova_BNS_lc"
+# Default analysis parameters
+prior_dir = "../nmma/priors"
+svdmodel_dir = "./svdmodels"
+
+default_analysis_parameters = {
+    "fix_z": False,
+    "tmin": 0.01,
+    "tmax": 7,
+    "dt": 0.1,
+    "nlive": 36,
+    "error_budget": 1.0,
+    "Ebv_max": 0.5724,
+    "interpolation_type": "sklearn_gp",
+    "sampler": "pymultinest",
+    "fit_trigger_time": True,
+    "trigger_time_heuristic": False,
+    "remove_nondetections": False,
+    "local_only": False,
+    "prior_directory": prior_dir,
+    "svdmodel_directory": svdmodel_dir,
+}
+
+# Fixed Parameters
+object_id = "kilonova_BNS_lc"
 
 
+# infile = f"{os.path.dirname(os.path.realpath('__file__'))}/kilonova_BNS_lc.csv"
+# prior  = os.path.join(os.path.dirname(os.path.realpath('__file__')), "..", "nmma", "priors")
+# svdmodel = os.path.join(os.path.dirname(os.path.realpath('__file__')), "svdmodels")
+
+
+# Directory paths and file names
+infile = "./kilonova_BNS_lc.csv"
+
+
+# Construct input data dictionary
 data_dict = {
     "inputs": {
         "photometry": infile,
-        "object_id": cand_name,
+        "object_id": "kilonova_BNS_lc",
+        "source": "Piro2021",
     }
 }
 
 
+# Configure logging
+log = make_log("nmma_analysis_service")
+
+
 def upload_analysis_results(results, data_dict, request_timeout=60):
     """
-    Upload the results to the webhook.
+    Upload the results to the webhook specified in data_dict.
     """
-
     log("Uploading results to webhook")
-    if data_dict["callback_method"] != "POST":
-        log("Callback URL is not a POST URL. Skipping.")
+    url = data_dict.get("callback_url")
+    if not url or data_dict.get("callback_method") != "POST":
+        log("Invalid callback URL or method. Skipping upload.")
         return
-    url = data_dict["callback_url"]
+
     try:
-        _ = requests.post(
-            url,
-            json=results,
-            timeout=request_timeout,
-        )
+        _ = requests.post(url, json=results, timeout=request_timeout)
     except requests.exceptions.Timeout:
-        # If we timeout here then it's precisely because
-        # we cannot write back to the SkyPortal instance.
-        # So returning something doesn't make sense in this case.
-        # Just log it and move on...
-        log("Callback URL timedout. Skipping.")
+        log("Callback URL timed out. Skipping.")
     except Exception as e:
-        log(f"Callback exception {e}.")
-
-
-def convert_csv(data_dict):
-
-    # this example analysis service expects the photometry to be in
-    # a csv file (at data_dict["inputs"]["photometry"]) with the following columns
-    # - filter: the name of the bandpass
-    # - mjd: the modified Julian date of the observation
-    # - magsys: the mag system (e.g. ab) of the observations
-    # - limiting_mag:
-    # - magerr:
-    # - flux: the flux of the observation
-    # the following code transforms these inputs from SkyPortal
-    # to the format expected by nmma.
-    # And makes sure thate the times is in correct format
-    # We need to convert the time format mjd to the format expected by of session so in jd
-    # the utils.py  file need jd format which will be convert in isot
-    # Rename Columns from skyportal to nmma format
-    # skyportal_col = ["mjd", "magerr", "limiting_mag", "instrument_name", obj_id]
-
-    try:
-        rez = {"status": "failure", "message": "", "analysis": {}}
-        data = Table.read(data_dict["inputs"]["photometry"], format="ascii.csv")
-
-        # data.rename_column("magerr", "mag_unc")
-        # data.rename_column("limiting_mag", "limmag")
-        # data.rename_column("instrument_name", "programid")
-        for col in data.columns:
-            if col == "magerr":
-                data.rename_column("magerr", "mag_unc")
-
-            elif col == "limmiting_mag":
-                data.rename_column("limiting_mag", "limmag")
-
-            elif col == "instrument_name":
-                data.rename_column("instrument_name", "programid")
-
-        # convert time in julien day format (jd)
-        data["jd"] = Time(data["jd"], format="mjd").jd
-        # data.rename_column("mjd", "jd")
-
-        # Rename filter
-        switcher = {1: "ztfg", 2: "ztfr", 3: "ztfi"}
-        for filt in switcher.values():
-            index = np.where(data["filter"] == filt)
-
-            if filt == "ztfg":
-                data["filter"][index] = "g"
-            elif filt == "ztfr":
-                data["filter"][index] = "r"
-            elif filt == "ztfi":
-                data["filter"][index] = "i"
-            else:
-                data["filter"][index] = filt
-
-        data = data.filled()
-        data.sort("jd")
-
-    except Exception as e:
-        rez.update(
-            {
-                "status": "failure",
-                "message": f"input data is not in the expected format {e}",
-            }
-        )
-        return rez
-
-    return data
+        log(f"Callback exception: {e}.")
 
 
 def run_nmma_model(data_dict):
     """
-    Use `nmma` to fit data to a model with name `model_name`.
+    Fit data to a specified model using NMMA and upload results.
     For this analysis, we expect the `inputs` dictionary to have the following keys:
        - model: the name of the model to fit to the data
        - photometry: the photometry to fit to the model (in csv format)
     Other analysis services may require additional keys in the `inputs` dictionary.
     """
-
     analysis_parameters = data_dict["inputs"].get(
         "analysis_parameters", data_dict["inputs"]
     )
     analysis_parameters = {**default_analysis_parameters, **analysis_parameters}
-
     model_name = analysis_parameters.get("source")
     fix_z = analysis_parameters.get("fix_z") in [True, "True", "t", "true"]
-    cand_name = analysis_parameters.get("object_id")
-    # prior_directory = analysis_parameters.get("prior_directory")
-    # svdmodel_directory = analysis_parameters.get("svdmodel_directory")
-    # interpolation_type = analysis_parameters.get("interpolation_type")
-    # sampler = analysis_parameters.get("sampler")
+    object_id = analysis_parameters.get("object_id")
 
-    # read data and create a cvs file expecte to nmma
-    rez = {"status": "failure", "message": "", "analysis": {}}
-
-    data = convert_csv(data_dict)
-
-    try:
-        # data = Table.read(data_dict["inputs"]["photometry"], format='ascii.csv')
-        if fix_z:
-            redshift = Table.read(data_dict["inputs"]["redshift"], format="ascii.csv")
-            z = redshift["redshift"][0]
-        else:
-            z = None
-
-    except Exception as e:
-        rez.update(
-            {
-                "status": "failure",
-                "message": f"input data is not in the expected format {e}",
-            }
-        )
-
+    # Initialize response structure
+    response = {"status": "failure", "message": "", "analysis": {}}
     local_temp_files = []
     try:
-        # Create a temporary file to save data in nmma csv format
+        # Convert input data to NMMA format and fit model
+        data = skyportal_input_to_nmma(analysis_parameters)
+        z = None
+        if fix_z:
+            z = Table.read(data_dict["inputs"]["redshift"], format="ascii.csv")[
+                "redshift"
+            ][0]
+
         with tempfile.NamedTemporaryFile(
             delete=False, suffix=".csv", mode="w"
         ) as outfile:
+            data.write(outfile, format="csv")
 
-            Data = Table()
-            Data["jd"] = data["jd"]
-            Data["mag"] = data["mag"]
-            Data["mag_unc"] = data["mag_unc"]
-            Data["filter"] = data["filter"]
-            Data["limmag"] = data["limmag"]
-            Data["programid"] = data["programid"]
-
-            df = Data.to_pandas()
-            df.to_csv(outfile)
+            # Flush and close the file to ensure data is written to disk
             outfile.flush()
+            os.fsync(outfile.fileno())
+            outfile.close()
 
             local_temp_files.append(outfile.name)
+            # Check if the file is not empty
+            if os.path.getsize(outfile.name) > 0:
+                print(f"Data successfully written to {outfile.name}")
+                # Call parse_csv with the path to the temporary file
+                nmma_data = parse_csv(outfile.name)
+            else:
+                print(f"Temporary file {outfile.name} is empty. Check the data Table.")
 
-            # infile take the  photometry csv file readable by nmma format
-            # Parses a file format with a single candidate
-            nmma_data = parse_csv(outfile.name)
-            # local_temp_files.append(outfile.name)
             # Fitting model model result
-
-            (inference_data, plot_data, fit_result,) = fit_lc(
-                model_name,
-                cand_name,
-                nmma_data,
-                fix_z,
-                z,
+            inference_data, plot_data, fit_result = fit_lc(
+                nmma_data, analysis_parameters, z
             )
 
             if fit_result.success:
-                fit_result.update({"source": model_name, "object_id": cand_name})
+                # Directly update fit_result with model name and object ID
+                fit_result.update({"source": model_name, "object_id": object_id})
 
-                fit_result.update({"source": model_name, "fix_z": fix_z})
-
-                f = tempfile.NamedTemporaryFile(
+                with tempfile.NamedTemporaryFile(
                     suffix=".joblib", prefix="results_", delete=False
-                )
-                f.close()
-                joblib.dump(fit_result, outfile.name, compress=3)
-                result_data = base64.b64encode(open(outfile.name, "rb").read())
-                local_temp_files.append(f.name)
+                ) as file:
+                    file.flush()
 
-                analysis_results = {
-                    "inference_data": {"format": "netcdf4", "data": inference_data},
-                    "plots": [{"format": "png", "data": plot_data}],
-                    "results": {"format": "joblib", "data": result_data},
-                }
-                rez.update(
-                    {
-                        "analysis": analysis_results,
-                        "status": "success",
-                        "message": f" Inference results of inference with "
-                        + r"$\log(bayes-factor)$"
-                        + f" = { fit_result.json_result['log_bayes_factor']}",
-                    }
-                )
+                    joblib.dump(fit_result, file.name, compress=3)
+                    result_data = base64.b64encode(open(file.name, "rb").read())
+
+                    local_temp_files.append(file.name)
+
+                    response.update(
+                        {
+                            "analysis": {
+                                "inference_data": {
+                                    "format": "netcdf4",
+                                    "data": base64.b64encode(inference_data).decode(),
+                                },
+                                "plots": [
+                                    {
+                                        "format": "png",
+                                        "data": base64.b64encode(plot_data).decode(),
+                                    }
+                                ],
+                                "results": {"format": "joblib", "data": result_data},
+                            },
+                            "status": "success",
+                            "message": f"Model {model_name} successfully fitted to {object_id} with "
+                            + r"$\log(bayes-factor)$"
+                            + f" = { fit_result.json_result['log_bayes_factor']}",
+                        }
+                    )
+
             else:
                 log("Fit failed.")
-                rez.update({"status": "failure", "message": "model failed to converge"})
+                response.update(
+                    {"status": "failure", "message": "Model fitting failed."}
+                )
 
     except Exception as e:
-        log(f"Exception while running the model: {e}")
-        log(f"{traceback.format_exc()}")
-        rez.update({"status": "failure", "message": f"problem running the model {e}"})
+        log(f"Exception while running the model: {traceback.format_exc()}")
+        response.update(
+            {"status": "failure", "message": f"Problem running the model: {e}"}
+        )
+
     finally:
         # clean up local files
         for f in local_temp_files:
@@ -266,10 +212,10 @@ def run_nmma_model(data_dict):
                 os.remove(f)
             except:  # noqa E722
                 pass
-    return rez
+    return response
 
 
-results = run_nmma_model(data_dict)
+# result = run_nmma_model(data_dict)
 
 
 class MainHandler(tornado.web.RequestHandler):
@@ -284,11 +230,12 @@ class MainHandler(tornado.web.RequestHandler):
         self.write({"status": "active"})
 
     def post(self):
-
-        # Analysis endpoint which sends the `data_dict` off for
-        # processing, returning immediately. The idea here is that
-        # the analysis model may take awhile to run so we
-
+        """
+        Analysis endpoint which sends the `data_dict` off for
+        processing, returning immediately. The idea here is that
+        the analysis model may take awhile to run so we
+        need async behavior.
+        """
         try:
             data_dict = tornado.escape.json_decode(self.request.body)
         except json.decoder.JSONDecodeError:
@@ -302,24 +249,37 @@ class MainHandler(tornado.web.RequestHandler):
                 log(f"missing required key {key} in data_dict")
                 return self.error(400, f"missing required key {key} in data_dict")
 
+        source = data_dict["inputs"].get("analysis_parameters", {}).get("source", None)
+        if source is None:
+            log("model not specified in data_dict.inputs.analysis_parameters")
+            return self.error(
+                400, "model not specified in data_dict.inputs.analysis_parameters"
+            )
+        elif source not in ALLOWED_MODELS:
+            log(f"model {source} is not one of: {ALLOWED_MODELS}")
+            return self.error(
+                400, f"model {source} is not allowed, must be one of: {ALLOWED_MODELS}"
+            )
+
         def nmma_analysis_done_callback(
             future,
-            logger=log,
             data_dict=data_dict,
         ):
+            """
+            Callback function for when the nmma analysis service is done.
+            Sends back results/errors via the callback_url.
 
-            # Callback function for when the nmma analysis service #is done.
-            # Sends back results/errors via the callback_url.
-            # This is run synchronously after the future completes
-            # so there is no need to await for `future`.
+            This is run synchronously after the future completes
+            so there is no need to await for `future`.
+            """
 
             try:
                 result = future.result()
             except Exception as e:
-                # catch all the exceptions and log them,
+                # catch all the exceptions and print them,
                 # try to write back to SkyPortal something
                 # informative.
-                logger(f"{str(future.exception())[:1024]} {e}")
+                log(f"{str(future.exception())[:1024]} {e}")
                 result = {
                     "status": "failure",
                     "message": f"{str(future.exception())[:1024]}{e}",
@@ -336,10 +296,16 @@ class MainHandler(tornado.web.RequestHandler):
         )
 
 
+class HealthHandler(tornado.web.RequestHandler):
+    def get(self):
+        self.write("OK")
+
+
 def make_app():
     return tornado.web.Application(
         [
-            (r"/analysis/demo_analysis", MainHandler),
+            (r"/analysis", MainHandler),
+            (r"/health", HealthHandler),
         ]
     )
 
@@ -349,17 +315,7 @@ if __name__ == "__main__":
     if "PORT" in os.environ:
         port = int(os.environ["PORT"])
     else:
-        port = 6901
+        port = 4003
     nmma_analysis.listen(port)
     log(f"NMMA Service Listening on port {port}")
     tornado.ioloop.IOLoop.current().start()
-
-
-"""
-if __name__ == "__main__":
-    nmma_analysis = make_app()
-    port = cfg["analysis_services.nmma_analysis_service.port"]
-    nmma_analysis.listen(port)
-    log(f"Listening on port {port}")
-    tornado.ioloop.IOLoop.current().start()
-"""

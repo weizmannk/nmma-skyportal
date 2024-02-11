@@ -9,68 +9,55 @@ import numpy as np
 from astropy.time import Time
 from astropy.table import Table
 from scipy.optimize import OptimizeResult
-
 import tempfile
 import shutil
-
 import bilby
-from utils.util import get_bestfit_lightcurve, plot_bestfit_lightcurve
-from nmma.em.utils import loadEvent
+from nmma.em.io import loadEvent
+from lightcurves_model import get_bestfit_lightcurve
+from util import check_and_remove_non_detection, plot_bestfit_lightcurve
 
-from utils.log import make_log
+from log import make_log
 
 log = make_log("nmma_analysis_service")
 
 
-# Fixed Parameters
-sampler = "pymultinest"
-interpolation_type = "tensorflow"
-prior_directory = f"{os.path.dirname(os.path.realpath(__file__))}/../../../nmma/priors"
-svdmodel_directory = (
-    f"{os.path.dirname(os.path.realpath(__file__))}/../../../nmma/svdmodels"
-)
+def fit_lc(nmma_data, analysis_parameters, z=None):
 
+    model_name = analysis_parameters.get("source")
+    object_id = analysis_parameters.get("object_id")
 
-def fit_lc(
-    model_name,
-    cand_name,
-    nmma_data,
-    fix_z=False,
-    z=None,
-):
+    label = f"{object_id}_{model_name}"
 
-    # Begin with stuff that may eventually replaced with something else,
-    # such as command line args or function args.
+    fix_z = analysis_parameters.get("fix_z") in [True, "True", "t", "true"]
+    tmin = analysis_parameters.get("tmin")
+    tmax = analysis_parameters.get("tmax")
+    dt = analysis_parameters.get("dt")
+    nlive = analysis_parameters.get("nlive")
+    error_budget = str(analysis_parameters.get("error_budget"))
+    Ebv_max = analysis_parameters.get("Ebv_max")
+    sampler = analysis_parameters.get("sampler")
+    interpolation_type = analysis_parameters.get("interpolation_type")
 
-    # Trigger time settings
-    # t0 is used as the trigger time if both fit and heuristic are false.
-    # Heuristic makes the trigger time 24hours before first detection.
-    t0 = 1
-    trigger_time_heuristic = False
-    fit_trigger_time = True
+    trigger_time_heuristic = analysis_parameters.get("trigger_time_heuristic")
+    fit_trigger_time = analysis_parameters.get("fit_trigger_time")
+    remove_nondetections = analysis_parameters.get("remove_nondetections")
 
-    # Will select prior file if None
-    # Can be assigned a filename to be used instead
-    prior = None
-
-    # Other important settings
-    # cpus = 2
-    nlive = 32
-    error_budget = 1.0
-
-    ##########################
-    # Setup parameters and fit
-    ##########################
+    local_only = analysis_parameters.get("local_only")
+    prior_directory = analysis_parameters.get("prior_directory")
+    svdmodel_directory = analysis_parameters.get("svdmodel_directory")
 
     # we will need to write to temp files
     # locally and then write their contents
     # to the results dictionary for uploading
-
+    local_temp_files = []
     plotdir = tempfile.mkdtemp()
-    # output the data
-    # in the format desired by NMMA
-    # try:
-    # Set the trigger time
+    plotName = os.path.join(plotdir, f"{label}_lightcurves.png")
+
+    inference_data = None
+    plot_data = None
+    fit_result = None
+
+    t0 = 0
     if fit_trigger_time:
         # Set to earliest detection in preparation for fit
         for line in nmma_data:
@@ -91,45 +78,30 @@ def fit_lc(
         # Set the trigger time
         trigger_time = t0
 
-    tmin = 0
-    tmax = 7
-    dt = 0.1
-    Ebv_max = 0.5724
-
     # GRB model requires special values so lightcurves can be generated without NMMA running into timeout errors.
     if model_name == "TrPi2018":
         tmin = 0.01
         tmax = 7.01
         dt = 0.35
 
-    # grb_resolution = 7
-    # jet_type = 0
-    # sampler = "pymultinest"
-    # seed = 42
-
     try:
-        # Set the prior file. Depends on model and if trigger time is a parameter.
-        if prior is None:
-            prior = f"{prior_directory}/{model_name}.prior"
-
-        # if not prior file exists, create it by using bilby
+        prior = f"{prior_directory}/{model_name}.prior"
         if not os.path.isfile(prior):
-            log(
-                f"Prior file for model {model_name} does not exist, bilby are creating it"
-            )
-            priors = bilby.gw.prior.PriorDict(prior)
+            log(f"Prior file for model {source} does not exist")
+            return
+        priors = bilby.gw.prior.PriorDict(prior)
+        if fix_z:
+            if z is not None:
+                from astropy.coordinates.distances import Distance
 
-            # if readshift is fixed we need z(readshift) value(s)
-            if fix_z:
-                if z is not None:
-                    from astropy.cosmology import Planck18 as cosmo
+                distance = Distance(z=z, unit="Mpc")
+                priors["luminosity_distance"] = distance.value
+            else:
+                raise ValueError("No redshift provided but `fix_z` requested.")
 
-                    priors["luminosity_distance"] = cosmo.luminosity_distance(z).value
-                else:
-                    raise ValueError("No redshift provided but `fix_z` requested.")
-
-            priors.to_file(plotdir, model_name)
-            prior = os.path.join(plotdir, f"{model_name}.prior")
+        priors.to_file(plotdir, model_name)
+        prior = os.path.join(plotdir, f"{model_name}.prior")
+        local_temp_files.append(prior)
 
         # output the data
         # in the format desired by NMMA
@@ -146,66 +118,70 @@ def fit_lc(
 
             # NMMA lightcurve fitting
             # triggered with a shell command
-            command = subprocess.run(
-                "light_curve_analysis"
-                + " --model "
-                + model_name
-                + " --svd-path "
-                + svdmodel_directory
-                + " --outdir "
-                + plotdir
-                + " --label "
-                + cand_name
-                + "_"
-                + model_name
-                + " --trigger-time "
-                + str(trigger_time)
-                + " --data "
-                + outfile.name
-                + " --prior "
-                + prior
-                + " --tmin "
-                + str(tmin)
-                + " --tmax "
-                + str(tmax)
-                + " --dt "
-                + str(dt)
-                + " --error-budget "
-                + str(error_budget)
-                + " --nlive "
-                + str(nlive)
-                + " --Ebv-max "
-                + str(Ebv_max)
-                + " --interpolation_type "
-                + interpolation_type
-                + " --sampler "
-                + sampler,
-                shell=True,
-                capture_output=True,
-            )
-            sys.stdout.buffer.write(command.stdout)
-            sys.stderr.buffer.write(command.stderr)
+            command = [
+                "lightcurve-analysis",
+                "--model",
+                model_name,
+                "--svd-path",
+                svdmodel_directory,
+                "--outdir",
+                plotdir,
+                "--label",
+                label,
+                "--trigger-time",
+                str(trigger_time),
+                "--data",
+                outfile.name,
+                "--prior",
+                prior,
+                "--tmin",
+                str(tmin),
+                "--tmax",
+                str(tmax),
+                "--dt",
+                str(dt),
+                "--error-budget",
+                error_budget,
+                "--nlive",
+                str(nlive),
+                "--Ebv-max",
+                str(Ebv_max),
+                "--interpolation-type",
+                interpolation_type,
+                "--sampler",
+                sampler,
+                "--local-only",
+            ]
 
-            ##############################
-            # Construct the best fit model
-            ##############################
-
-            plot_sample_times_KN = np.arange(0.0, 30.0, 0.1)
-            plot_sample_times_GRB = np.arange(30.0, 950.0, 1.0)
-            plot_sample_times = np.concatenate(
-                (plot_sample_times_KN, plot_sample_times_GRB)
+            # Use Popen to execute the command and capture the output in real-time
+            process = subprocess.Popen(
+                command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
             )
+
+            # Read the output line by line as it becomes available
+            while True:
+                output = process.stdout.readline()
+                if output == "" and process.poll() is not None:
+                    break
+                if output:
+                    print(output.strip())
+
+            # After the process is done, you can also capture any remaining output if needed
+            stdout, stderr = process.communicate()
+            if stdout:
+                print(stdout)
+            if stderr:
+                print(stderr, file=sys.stderr)
 
             posterior_file = os.path.join(
-                plotdir, cand_name + "_" + model_name + "_posterior_samples.dat"
+                plotdir, object_id + "_" + model_name + "_posterior_samples.dat"
             )
             json_file = os.path.join(
-                plotdir, cand_name + "_" + model_name + "_result.json"
+                plotdir, object_id + "_" + model_name + "_result.json"
             )
 
             if os.path.isfile(posterior_file):
                 tab = Table.read(posterior_file, format="csv", delimiter=" ")
-                print(tab)
                 inference = az.convert_to_inference_data(
                     tab.to_pandas().to_dict(orient="list")
                 )
@@ -223,29 +199,62 @@ def fit_lc(
                 # log_evidence = lcDict["log_evidence"]
                 # log_evidence_err = lcDict["log_evidence_err"]
 
-                (
-                    posterior_samples,
-                    bestfit_params,
-                    bestfit_lightcurve_magKN_KNGRB,
-                ) = get_bestfit_lightcurve(
-                    model_name,
-                    posterior_file,
-                    svdmodel_directory,
-                    plot_sample_times,
-                    interpolation_type=interpolation_type,
+                ##############################
+                # Construct the best fit model
+                ##############################
+                plot_sample_times = np.arange(tmin, tmax + dt, dt)
+                if (
+                    model_name == "TrPi2018"
+                    or model_name == "nugent-hyper"
+                    or model_name == "salt2"
+                ):
+                    plot_sample_times = np.arange(0.01, 10.21, 0.2)
+
+                data_out = check_and_remove_non_detection(
+                    data_out, remove_nondetections=remove_nondetections
                 )
 
-                # if fit_trigger_time:
-                #    trigger_time += bestfit_params['KNtimeshift']
+                filters_to_analyze = list(data_out.keys())
+                error_budget = [float(x) for x in error_budget.split(",")]
+                error_budget = dict(
+                    zip(filters_to_analyze, error_budget * len(filters_to_analyze))
+                )
 
-                plotName = os.path.join(plotdir, f"{model_name}_lightcurves.png")
+                print("Running with filters {0}".format(filters_to_analyze))
 
+                (
+                    bestfit_params,
+                    bestfit_lightcurve_mag,
+                    model_names,
+                    models,
+                    light_curve_model,
+                ) = get_bestfit_lightcurve(
+                    posterior_file=posterior_file,
+                    model=model_name,
+                    sample_times=plot_sample_times,
+                    svd_path=svdmodel_directory,
+                    interpolation_type=interpolation_type,
+                    filters_to_analyze=filters_to_analyze,
+                    sample_over_Hubble=False,
+                    grb_resolution=7,
+                    jet_type=0,
+                    local_only=local_only,
+                    bestfit=True,
+                    error_budget=1,
+                    outdir=plotdir,
+                    label=label,
+                )
                 plot_bestfit_lightcurve(
-                    outfile.name,
-                    bestfit_lightcurve_magKN_KNGRB,
-                    error_budget,
-                    trigger_time,
-                    plotName,
+                    data_out=data_out,
+                    trigger_time=trigger_time,
+                    filters_to_analyze=filters_to_analyze,
+                    error_budget=error_budget,
+                    plotName=plotName,
+                    bestfit_params=bestfit_params,
+                    bestfit_lightcurve_mag=bestfit_lightcurve_mag,
+                    model_names=model_names,
+                    models=models,
+                    light_curve_model=light_curve_model,
                 )
                 plot_data = base64.b64encode(open(plotName, "rb").read())
 
@@ -260,15 +269,16 @@ def fit_lc(
         if os.path.isfile(plotName):
             fit_result = OptimizeResult(
                 success=True,
-                message=f"{model_name} model has been used successfully to fit {cand_name}.",
+                message=f"{model_name} model has been used successfully to fit {object_id}.",
                 bestfit_params=bestfit_params,
-                bestfit_lightcurve_magKN_KNGRB=bestfit_lightcurve_magKN_KNGRB,
+                bestfit_lightcurve_mag=bestfit_lightcurve_mag,
                 json_result=result,
+                data_out=data_out,
             )
         else:
             fit_result = OptimizeResult(
                 success=False,
-                message=f"Unfortunatly something goes wrong during {model_name} mdel to fit {cand_name}.",
+                message=f"Unfortunatly something goes wrong during {model_name} mdel to fit {object_id}.",
             )
 
     shutil.rmtree(plotdir)
