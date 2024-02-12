@@ -1,4 +1,5 @@
 ## python -m nmma.utils.models --model="Bu2019lm" --filters=ztfr,ztfg,ztfi --svd-path='./svdmodels' --source='zenodo'
+
 import os
 import functools
 import tempfile
@@ -23,8 +24,7 @@ from fit import fit_lc
 from nmma_process import skyportal_input_to_nmma, parse_csv
 from log import make_log
 
-# we need to set the backend here to insure we
-# can render the plot headlessly
+# Set the backend for matplotlib to ensure it can render plots headlessly
 matplotlib.use("Agg")
 rng = np.random.default_rng()
 
@@ -37,10 +37,10 @@ ALLOWED_MODELS = [
     "Bu2022Ye",
 ]
 
-
 # Default analysis parameters
-prior_dir = "../nmma/priors"
-svdmodel_dir = "./svdmodels"
+infile = f"{os.path.dirname(os.path.realpath('__file__'))}/kilonova_BNS_lc.csv"
+prior_dir = os.path.join(os.path.dirname(os.path.realpath('__file__')), "..", "nmma", "priors")
+svdmodel_dir = os.path.join(os.path.dirname(os.path.realpath('__file__')), "svdmodels")
 
 default_analysis_parameters = {
     "fix_z": False,
@@ -60,26 +60,15 @@ default_analysis_parameters = {
     "svdmodel_directory": svdmodel_dir,
 }
 
-# Fixed Parameters
-object_id = "kilonova_BNS_lc"
-
-
-# infile = f"{os.path.dirname(os.path.realpath('__file__'))}/kilonova_BNS_lc.csv"
-# prior  = os.path.join(os.path.dirname(os.path.realpath('__file__')), "..", "nmma", "priors")
-# svdmodel = os.path.join(os.path.dirname(os.path.realpath('__file__')), "svdmodels")
-
-
-# Directory paths and file names
-infile = "./kilonova_BNS_lc.csv"
-
-
-# Construct input data dictionary
+# Construct input data dictionary, callback_url, and callback_method
 data_dict = {
     "inputs": {
         "photometry": infile,
         "object_id": "kilonova_BNS_lc",
-        "source": "Piro2021",
-    }
+        "source": "Piro2021",  
+    },
+    "callback_url": "http://localhost:5000",  
+    "callback_method": "POST"
 }
 
 
